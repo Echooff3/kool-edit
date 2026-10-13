@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleName</key>
+    <string>Kool Edit</string>
+    <key>CFBundleDisplayName</key>
+    <string>Kool Edit</string>
+    <key>CFBundleExecutable</key>
+    <string>kool-edit</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.kooledit.KoolEdit</string>
+    <key>CFBundleIconFile</key>
+    <string>KoolEdit</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.music</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+
+    <!-- Audio files Kool Edit can open. Keep in sync with AUDIO_UTIS in src/macos.rs. -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Audio File</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.audio</string>
+                <string>public.mp3</string>
+                <string>com.microsoft.waveform-audio</string>
+                <string>public.aiff-audio</string>
+                <string>public.aifc-audio</string>
+                <string>org.xiph.flac</string>
+                <string>public.mpeg-4-audio</string>
+                <string>com.apple.m4a-audio</string>
+                <string>public.aac-audio</string>
+                <string>com.apple.coreaudio-format</string>
+                <string>org.xiph.ogg-audio</string>
+                <string>org.xiph.ogg-vorbis</string>
+            </array>
+        </dict>
+    </array>
+
+    <!-- macOS doesn't always know about Ogg; teach it so Finder can route .ogg files here. -->
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.xiph.ogg-audio</string>
+            <key>UTTypeDescription</key>
+            <string>Ogg Audio</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.audio</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>ogg</string>
+                    <string>oga</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>audio/ogg</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>

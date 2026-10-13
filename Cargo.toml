@@ -1,0 +1,57 @@
+[package]
+name = "kool-edit"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "A quick and dirty single-track audio editor/player in the spirit of Cool Edit"
+default-run = "kool-edit"
+
+[dependencies]
+cpal = "0.18.2"
+eframe = "0.36.2"
+hound = "3.5.1"
+png = "0.18"
+rfd = "0.17.2"
+symphonia = { version = "0.6.1", features = ["all"] }
+winit = "0.30.13"
+
+[features]
+# Scripted input + self-screenshots for UI testing (see src/devtools.rs).
+devtools = []
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSArray",
+    "NSBundle",
+    "NSError",
+    "NSString",
+    "NSThread",
+    "NSURL",
+] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "objc2-uniform-type-identifiers",
+    "NSApplication",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSWorkspace",
+] }
+objc2-uniform-type-identifiers = { version = "0.3", default-features = false, features = [
+    "std",
+    "UTType",
+] }
+
+[profile.dev]
+opt-level = 1
+
+# Decoding and waveform scanning are painfully slow unoptimized.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "thin"
