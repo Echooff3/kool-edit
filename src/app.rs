@@ -14,7 +14,7 @@ use crate::audio::{Effect, Samples};
 use crate::decode::{self, Loaded};
 use crate::doc::{Document, Sel, SourceInfo};
 use crate::player::Player;
-use crate::settings::Settings;
+use crate::settings::{self, Settings};
 use crate::timefmt;
 use crate::ui::theme::*;
 use crate::ui::wave::{self, ColumnCache, Overview, View, WaveState};
@@ -183,6 +183,7 @@ impl KoolApp {
             app.settings = Settings::load();
         }
         app.saved_settings = app.settings.clone();
+        app.player.set_gain(settings::volume_to_gain(app.settings.volume_db));
         if let Some(path) = initial {
             app.start_loading(path, ctx);
         }
@@ -387,6 +388,7 @@ impl KoolApp {
             from = 0;
         }
         let loop_start = if had_selection { sel.start } else { 0 };
+        self.player.set_gain(settings::volume_to_gain(self.settings.volume_db));
         match self.player.play(doc.data.clone(), from, end, loop_start, self.looping) {
             Ok(()) => self.play = Some(PlayInfo { had_selection }),
             Err(e) => self.error("Playback", &e),
@@ -694,6 +696,9 @@ impl KoolApp {
     // Per-frame bookkeeping
 
     fn poll(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        // Keep the audio thread's gain in step with the saved fader, including while a stream
+        // is already running. The slider also publishes immediately so a drag isn't a frame late.
+        self.player.set_gain(settings::volume_to_gain(self.settings.volume_db));
         #[cfg(target_os = "macos")]
         {
             if let Some(path) = crate::macos::take_open_requests().pop() {
@@ -1019,6 +1024,7 @@ impl KoolApp {
                     });
                 });
             });
+            self.volume_box(ui);
             group_box(ui, "Zoom", |ui| {
                 let sz = vec2(30.0, 25.0);
                 let mut b = |ui: &mut Ui, icon, enabled: bool, tip: &str, act| {
@@ -1043,6 +1049,38 @@ impl KoolApp {
             self.lcd(ui);
             ui.add_space(4.0);
             group_box(ui, "Selection / View", |ui| self.time_fields(ui));
+        });
+    }
+
+    /// Master output fader, sitting in the transport row. Double-click returns to 0 dB.
+    fn volume_box(&mut self, ui: &mut Ui) {
+        group_box(ui, "Volume", |ui| {
+            // Fixed slot, the same height as the two transport-button rows. A child
+            // `with_layout` would otherwise claim the rest of the controls row.
+            let (rect, _) = ui.allocate_exact_size(vec2(146.0, 52.0), Sense::hover());
+            let mut child = ui.new_child(
+                egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Center)),
+            );
+            child.spacing_mut().item_spacing.y = 2.0;
+            child.add_space(6.0);
+            let text = settings::format_volume(self.settings.volume_db);
+            let (label, _) = child.allocate_exact_size(vec2(138.0, 15.0), Sense::hover());
+            child.painter().text(label.center(), Align2::CENTER_CENTER, text, FontId::proportional(12.0), TEXT);
+            let mut db = self.settings.volume_db;
+            let resp = widgets::volume_slider(
+                &mut child,
+                &mut db,
+                settings::VOLUME_MIN_DB,
+                settings::VOLUME_MAX_DB,
+                0.0,
+                vec2(138.0, 22.0),
+            );
+            db = settings::snap_volume_db(db);
+            if db != self.settings.volume_db {
+                self.settings.volume_db = db;
+                self.player.set_gain(settings::volume_to_gain(db));
+            }
+            resp.on_hover_text("Master volume, silence to +6 dB. Double-click to reset to 0 dB.");
         });
     }
 
@@ -1222,7 +1260,7 @@ impl KoolApp {
         let p = ui.painter();
         bevel(p, rect, false);
         widgets::meter(p, rect.shrink(2.0), self.meter.db, self.meter.hold, self.meter.clipped);
-        resp.on_hover_text("Output level. Click to reset the clip lights.");
+        resp.on_hover_text("Output level, after the master volume. Click to reset the clip lights.");
     }
 
     fn central(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {

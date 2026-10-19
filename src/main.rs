@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_title("Kool Edit")
             .with_app_id("dev.kooledit.KoolEdit")
             .with_inner_size([1180.0, 740.0])
-            .with_min_inner_size([820.0, 520.0])
+            .with_min_inner_size([1000.0, 520.0])
             .with_drag_and_drop(true)
             .with_active(!background),
         ..Default::default()

@@ -302,6 +302,48 @@ fn grayed(c: Color32) -> Color32 {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Master volume fader (sunken track, raised thumb, like the transport buttons)
+
+/// Horizontal dB slider. A double-click returns `value` to `unity` (0 dB).
+pub fn volume_slider(ui: &mut Ui, value: &mut f32, min: f32, max: f32, unity: f32, size: Vec2) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
+    let span = (max - min).max(1.0e-6);
+    let thumb_w = 13.0;
+    let travel_left = rect.left() + thumb_w * 0.5;
+    let travel_w = (rect.width() - thumb_w).max(1.0);
+    if resp.double_clicked() {
+        *value = unity;
+    } else if (resp.dragged() || resp.clicked())
+        && let Some(p) = resp.interact_pointer_pos()
+    {
+        let t = ((p.x - travel_left) / travel_w).clamp(0.0, 1.0);
+        *value = min + t * span;
+    }
+    let t = ((*value - min) / span).clamp(0.0, 1.0);
+    let thumb_x = travel_left + t * travel_w;
+    let p = ui.painter();
+
+    let mark_t = ((unity - min) / span).clamp(0.0, 1.0);
+    let mark_x = travel_left + mark_t * travel_w;
+    p.line_segment([pos2(mark_x, rect.top()), pos2(mark_x, rect.top() + 3.0)], Stroke::new(1.0, DARK));
+
+    let thumb_h = 14.0;
+    let thumb = Rect::from_center_size(pos2(thumb_x, rect.center().y + 1.0), vec2(thumb_w, thumb_h));
+    let track = Rect::from_center_size(pos2(rect.center().x, thumb.center().y), vec2(rect.width(), 6.0));
+    p.rect_filled(track, CornerRadius::ZERO, Color32::WHITE);
+    thin_bevel(p, track, false);
+
+    let pressed = resp.is_pointer_button_down_on();
+    p.rect_filled(thumb, CornerRadius::ZERO, FACE);
+    bevel(p, thumb, !pressed);
+    p.line_segment(
+        [pos2(thumb.center().x, thumb.top() + 3.0), pos2(thumb.center().x, thumb.bottom() - 3.0)],
+        Stroke::new(1.0, if pressed { DARK } else { SHADOW }),
+    );
+    resp
+}
+
+// ---------------------------------------------------------------------------------------------
 // Seven-segment LCD
 
 const SEGMENTS: [u8; 10] = [
