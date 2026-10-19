@@ -77,12 +77,20 @@ Open `KoolEdit.xcodeproj` in Xcode 26, pick your team under Signing &
 Capabilities, and run on your iPhone (or a simulator). Bundle ID
 `com.trilsoft.kooledit`, iOS 17 or later.
 
-The tests cover the audio code (peaks, every edit and effect, export, import,
-sample-rate conversion) and the view maths:
+The unit tests cover the audio code (peaks, every edit and effect, export,
+import, sample-rate conversion) and the view maths. The UI tests walk through
+the app with real gestures: recording a marked take, then marking, long-press
+selecting between markers, dragging, zooming, pinching, playing, an effect and
+its undo, landscape, the markers list and sharing. They save a screenshot at
+each step to the test results, and to a folder as PNGs if you name one:
 
 ```sh
-xcodebuild test -project KoolEdit.xcodeproj -scheme KoolEdit -destination 'platform=iOS Simulator,name=iPhone 17'
+TEST_RUNNER_SHOTS=/tmp/kool-shots xcodebuild test -project KoolEdit.xcodeproj -scheme KoolEdit -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
+
+The editing walkthrough opens "Sunday Jam" if there is one, otherwise the
+newest take, and is skipped when there are none. The recording walkthrough is
+skipped on a Mac with no audio input for the Simulator to use.
 
 The icon is the macOS one, cropped to fill the square (from the repository root):
 

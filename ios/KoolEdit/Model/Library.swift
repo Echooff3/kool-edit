@@ -88,13 +88,23 @@ final class Library {
                 let scoped = url.startAccessingSecurityScopedResource()
                 let result = Result { try Library.importAudio(url, into: root) }
                 if scoped { url.stopAccessingSecurityScopedResource() }
-                if removingOriginals { try? FileManager.default.removeItem(at: url) }
+                // A file that wouldn't import is kept, out of the way of the
+                // next look in the inbox.
+                var setAside = false
+                if removingOriginals {
+                    if case .success = result {
+                        try? FileManager.default.removeItem(at: url)
+                    } else {
+                        setAside = Library.setAside(url)
+                    }
+                }
+                let keptIn = setAside ? " It's in the \(Library.notImported) folder." : ""
                 await MainActor.run {
                     self.importing -= 1
                     self.inFlight.remove(url)
                     switch result {
                     case .success(let take): self.add(take)
-                    case .failure(let error): self.error = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
+                    case .failure(let error): self.error = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)\(keptIn)"
                     }
                 }
             }
@@ -111,6 +121,23 @@ final class Library {
             files += contents.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
         }
         importFiles(files, removingOriginals: true)
+    }
+
+    nonisolated static let notImported = "Not Imported"
+
+    /// Moves a file that wouldn't import into Documents/Not Imported.
+    nonisolated static func setAside(_ url: URL) -> Bool {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let folder = documents.appendingPathComponent(notImported)
+        let dest = folder.appendingPathComponent(url.lastPathComponent)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.moveItem(at: url, to: dest)
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// A file opened from another app.

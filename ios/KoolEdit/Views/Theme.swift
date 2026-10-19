@@ -172,6 +172,7 @@ struct TitleBar: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 6)
             .frame(height: 22)
-            .background(LinearGradient(colors: [Theme.navy, Theme.titleEnd], startPoint: .leading, endPoint: .trailing))
+            // Kept out of the status bar, where it would hide the clock.
+            .background(LinearGradient(colors: [Theme.navy, Theme.titleEnd], startPoint: .leading, endPoint: .trailing), ignoresSafeAreaEdges: [])
     }
 }

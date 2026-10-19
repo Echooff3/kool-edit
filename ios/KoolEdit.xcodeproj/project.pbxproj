@@ -14,11 +14,19 @@
 			remoteGlobalIDString = 7E0000000000000000000010;
 			remoteInfo = KoolEdit;
 		};
+		7E0000000000000000000052 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7E0000000000000000000010;
+			remoteInfo = KoolEdit;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		7E0000000000000000000020 /* KoolEdit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KoolEdit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E0000000000000000000021 /* KoolEditTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KoolEditTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E0000000000000000000022 /* KoolEditUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KoolEditUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -30,6 +38,11 @@
 		7E0000000000000000000031 /* KoolEditTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = KoolEditTests;
+			sourceTree = "<group>";
+		};
+		7E0000000000000000000032 /* KoolEditUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KoolEditUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +62,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7E0000000000000000000047 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -57,6 +77,7 @@
 			children = (
 				7E0000000000000000000030 /* KoolEdit */,
 				7E0000000000000000000031 /* KoolEditTests */,
+				7E0000000000000000000032 /* KoolEditUITests */,
 				7E0000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -66,6 +87,7 @@
 			children = (
 				7E0000000000000000000020 /* KoolEdit.app */,
 				7E0000000000000000000021 /* KoolEditTests.xctest */,
+				7E0000000000000000000022 /* KoolEditUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -118,6 +140,29 @@
 			productReference = 7E0000000000000000000021 /* KoolEditTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		7E0000000000000000000012 /* KoolEditUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7E0000000000000000000063 /* Build configuration list for PBXNativeTarget "KoolEditUITests" */;
+			buildPhases = (
+				7E0000000000000000000046 /* Sources */,
+				7E0000000000000000000047 /* Frameworks */,
+				7E0000000000000000000048 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7E0000000000000000000053 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7E0000000000000000000032 /* KoolEditUITests */,
+			);
+			name = KoolEditUITests;
+			packageProductDependencies = (
+			);
+			productName = KoolEditUITests;
+			productReference = 7E0000000000000000000022 /* KoolEditUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -132,6 +177,10 @@
 						CreatedOnToolsVersion = 26.4;
 					};
 					7E0000000000000000000011 = {
+						CreatedOnToolsVersion = 26.4;
+						TestTargetID = 7E0000000000000000000010;
+					};
+					7E0000000000000000000012 = {
 						CreatedOnToolsVersion = 26.4;
 						TestTargetID = 7E0000000000000000000010;
 					};
@@ -153,6 +202,7 @@
 			targets = (
 				7E0000000000000000000010 /* KoolEdit */,
 				7E0000000000000000000011 /* KoolEditTests */,
+				7E0000000000000000000012 /* KoolEditUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -166,6 +216,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7E0000000000000000000045 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E0000000000000000000048 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -189,6 +246,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7E0000000000000000000046 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -197,9 +261,48 @@
 			target = 7E0000000000000000000010 /* KoolEdit */;
 			targetProxy = 7E0000000000000000000050 /* PBXContainerItemProxy */;
 		};
+		7E0000000000000000000053 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7E0000000000000000000010 /* KoolEdit */;
+			targetProxy = 7E0000000000000000000052 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		7E0000000000000000000076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trilsoft.kooledit.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = KoolEdit;
+			};
+			name = Debug;
+		};
+		7E0000000000000000000077 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.trilsoft.kooledit.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = KoolEdit;
+			};
+			name = Release;
+		};
 		7E0000000000000000000070 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -347,6 +450,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		7E0000000000000000000063 /* Build configuration list for PBXNativeTarget "KoolEditUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7E0000000000000000000076 /* Debug */,
+				7E0000000000000000000077 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		7E0000000000000000000060 /* Build configuration list for PBXProject "KoolEdit" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

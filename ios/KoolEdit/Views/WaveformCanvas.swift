@@ -166,9 +166,12 @@ final class WaveformCanvas: UIView, UIGestureRecognizerDelegate {
             }
         }
 
+        // The ruler first so the marker flags sit on it, and the selection
+        // edges under the markers so a marker on an edge still shows.
+        drawRuler(ctx)
+        if case let (a, b)? = sel { drawEdges(ctx, wave, a, b) }
         drawMarkers(ctx, wave)
         drawCursor(ctx, wave)
-        drawRuler(ctx)
         if case let (a, b)? = sel { drawHandles(ctx, wave, a, b) }
     }
 
@@ -296,14 +299,19 @@ final class WaveformCanvas: UIView, UIGestureRecognizerDelegate {
         ctx.restoreGState()
     }
 
-    /// Grab handles on the selection edges, sized for fingers.
-    private func drawHandles(_ ctx: CGContext, _ wave: CGRect, _ a: CGFloat, _ b: CGFloat) {
+    private func drawEdges(_ ctx: CGContext, _ wave: CGRect, _ a: CGFloat, _ b: CGFloat) {
         for hx in [a, b] where hx >= -8 && hx <= bounds.width + 8 {
             ctx.setStrokeColor(Theme.selectionWave.cgColor)
             ctx.setLineWidth(1.5)
             ctx.move(to: CGPoint(x: hx, y: wave.minY))
             ctx.addLine(to: CGPoint(x: hx, y: wave.maxY))
             ctx.strokePath()
+        }
+    }
+
+    /// Grab handles on the selection edges, sized for fingers.
+    private func drawHandles(_ ctx: CGContext, _ wave: CGRect, _ a: CGFloat, _ b: CGFloat) {
+        for hx in [a, b] where hx >= -8 && hx <= bounds.width + 8 {
             let knob = CGRect(x: hx - 8, y: wave.maxY - 22, width: 16, height: 16)
             ctx.setFillColor(Theme.selectionWave.cgColor)
             ctx.fillEllipse(in: knob)

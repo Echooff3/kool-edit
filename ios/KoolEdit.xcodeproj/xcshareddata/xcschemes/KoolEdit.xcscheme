@@ -38,6 +38,16 @@
                ReferencedContainer = "container:KoolEdit.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "7E0000000000000000000012"
+               BuildableName = "KoolEditUITests.xctest"
+               BlueprintName = "KoolEditUITests"
+               ReferencedContainer = "container:KoolEdit.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

@@ -97,7 +97,12 @@ enum AudioIO {
     /// Converts any audio file iOS can read into a take (24-bit CAF, at most
     /// two channels) and returns its peaks.
     static func convert(_ source: URL, to dest: URL) throws -> Peaks {
-        let input = try reader(source)
+        let input: AVAudioFile
+        do {
+            input = try reader(source)
+        } catch {
+            throw AudioError.unsupported("It isn't audio that iOS can read.")
+        }
         let format = input.processingFormat
         guard format.channelCount > 0, format.sampleRate > 0, input.length > 0 else { throw AudioError.empty }
         let output = try writer(dest, sampleRate: format.sampleRate, channels: min(Int(format.channelCount), 2))
