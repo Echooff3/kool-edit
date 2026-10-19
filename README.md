@@ -8,6 +8,9 @@ readout, a classic transport, and level meters along the bottom.
 
 One file at a time, no multitrack. Open a file, listen, select, cut/copy/paste/trim, save.
 
+There's also an iPhone and iPad version in [`ios/`](ios/README.md), built for touch, with
+recording, markers and sharing a selection.
+
 ## Features
 
 - **Opens** WAV, AIFF, MP3, FLAC, Ogg Vorbis, M4A (AAC and ALAC) and CAF (decoded with symphonia).
