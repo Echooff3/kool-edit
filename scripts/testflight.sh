@@ -59,6 +59,7 @@ python3 "$ROOT/scripts/asc_api.py" prepare \
 
 BUILD_NUMBER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["buildNumber"])' "$STATUS_JSON")"
 APPLE_APP_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["appleAppId"])' "$STATUS_JSON")"
+PROFILE_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("profileName") or "")' "$STATUS_JSON")"
 echo "Uploading Kool Edit build $BUILD_NUMBER for Apple app $APPLE_APP_ID"
 
 # xcodebuild can sit forever on a login-keychain dialog. Bail out as soon as
@@ -161,7 +162,10 @@ if [[ "$ARCHIVED_BUILD" != "$BUILD_NUMBER" ]]; then
   exit 1
 fi
 
-cat > "$EXPORT_PLIST" <<EOF
+write_export_plist() {
+  local style="$1"
+  if [[ "$style" == "automatic" ]]; then
+    cat > "$EXPORT_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -173,20 +177,59 @@ cat > "$EXPORT_PLIST" <<EOF
   <key>manageAppVersionAndBuildNumber</key><false/>
 </dict></plist>
 EOF
+  else
+    cat > "$EXPORT_PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>destination</key><string>export</string>
+  <key>teamID</key><string>${ASC_TEAM_ID}</string>
+  <key>signingStyle</key><string>manual</string>
+  <key>signingCertificate</key><string>Apple Distribution</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>com.trilsoft.kooledit</key>
+    <string>${PROFILE_NAME}</string>
+  </dict>
+  <key>uploadSymbols</key><true/>
+  <key>manageAppVersionAndBuildNumber</key><false/>
+</dict></plist>
+EOF
+  fi
+}
 
-echo "Exporting IPA..."
-if ! run_logged "$EXPORT_LOG" xcodebuild -exportArchive \
-  -archivePath "$ARCHIVE" \
-  -exportPath "$EXPORT_DIR" \
-  -exportOptionsPlist "$EXPORT_PLIST" \
-  -allowProvisioningUpdates \
-  -authenticationKeyPath "$ASC_KEY_PATH" \
-  -authenticationKeyID "$ASC_KEY_ID" \
-  -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-then
-  echo "EXPORT_FAILED" >&2
-  tail -80 "$EXPORT_LOG" >&2 || true
-  exit 1
+export_archive() {
+  rm -rf "$EXPORT_DIR"
+  mkdir -p "$EXPORT_DIR"
+  run_logged "$EXPORT_LOG" xcodebuild -exportArchive \
+    -archivePath "$ARCHIVE" \
+    -exportPath "$EXPORT_DIR" \
+    -exportOptionsPlist "$EXPORT_PLIST" \
+    -allowProvisioningUpdates \
+    -authenticationKeyPath "$ASC_KEY_PATH" \
+    -authenticationKeyID "$ASC_KEY_ID" \
+    -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+}
+
+echo "Exporting IPA with automatic signing..."
+write_export_plist automatic
+if ! export_archive; then
+  if [[ -z "$PROFILE_NAME" ]]; then
+    echo "EXPORT_FAILED" >&2
+    tail -80 "$EXPORT_LOG" >&2 || true
+    exit 1
+  fi
+  # This API key cannot use cloud-managed distribution certificates. Re-sign
+  # with the Apple Distribution identity already in the login keychain and the
+  # App Store profile installed above. Nothing is revoked.
+  echo "Automatic export could not use a cloud distribution certificate. Exporting with the local Apple Distribution certificate..."
+  write_export_plist manual
+  if ! export_archive; then
+    echo "EXPORT_FAILED" >&2
+    tail -80 "$EXPORT_LOG" >&2 || true
+    exit 1
+  fi
 fi
 echo "EXPORT_OK"
 

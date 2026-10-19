@@ -2,7 +2,10 @@
 """App Store Connect helpers for Kool Edit. Never prints the API key or JWT."""
 
 import argparse
+import base64
 import json
+import os
+import plistlib
 import re
 import subprocess
 import sys
@@ -180,6 +183,85 @@ def distribution_identity():
     return None
 
 
+def find_distribution_certificate(token):
+    """Return the existing Apple Distribution certificate. Never creates or revokes one."""
+    status, payload = request(
+        token,
+        "GET",
+        "/v1/certificates?filter[certificateType]=DISTRIBUTION&limit=20",
+    )
+    if status != 200:
+        log(f"List distribution certificates failed: {api_error(payload)}")
+        sys.exit(1)
+    certificates = payload.get("data", [])
+    for item in certificates:
+        if item.get("id") == "T3J35W46XN":
+            return item
+    return certificates[0] if certificates else None
+
+
+def install_profile(content_b64):
+    raw = base64.b64decode(content_b64)
+    plist_start = raw.find(b"<?xml")
+    plist_end = raw.find(b"</plist>")
+    profile = plistlib.loads(raw[plist_start : plist_end + len(b"</plist>")])
+    uuid = profile["UUID"]
+    dest_dir = os.path.expanduser("~/Library/MobileDevice/Provisioning Profiles")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, f"{uuid}.mobileprovision")
+    with open(dest, "wb") as handle:
+        handle.write(raw)
+    xcode_dir = os.path.expanduser(
+        "~/Library/Developer/Xcode/UserData/Provisioning Profiles"
+    )
+    os.makedirs(xcode_dir, exist_ok=True)
+    with open(os.path.join(xcode_dir, f"{uuid}.mobileprovision"), "wb") as handle:
+        handle.write(raw)
+    log(f"Installed provisioning profile {profile.get('Name')} ({uuid}).")
+    return profile
+
+
+def ensure_profile(token, bundle, certificate):
+    profile_name = "Kool Edit App Store"
+    status, payload = request(token, "GET", "/v1/profiles?limit=100")
+    if status != 200:
+        log(f"List provisioning profiles failed: {api_error(payload)}")
+        return None
+    for item in payload.get("data", []):
+        attrs = item.get("attributes", {})
+        if attrs.get("name") == profile_name and attrs.get("profileState") == "ACTIVE":
+            detail_status, detail = request(token, "GET", f"/v1/profiles/{item['id']}")
+            content = detail.get("data", {}).get("attributes", {}).get("profileContent")
+            if detail_status == 200 and content:
+                install_profile(content)
+                return item
+    status, payload = request(
+        token,
+        "POST",
+        "/v1/profiles",
+        {
+            "data": {
+                "type": "profiles",
+                "attributes": {
+                    "name": profile_name,
+                    "profileType": "IOS_APP_STORE",
+                },
+                "relationships": {
+                    "bundleId": {"data": {"type": "bundleIds", "id": bundle["id"]}},
+                    "certificates": {
+                        "data": [{"type": "certificates", "id": certificate["id"]}]
+                    },
+                },
+            }
+        },
+    )
+    if status not in (200, 201):
+        log(f"Create provisioning profile failed: {api_error(payload)}")
+        return None
+    install_profile(payload["data"]["attributes"]["profileContent"])
+    return payload["data"]
+
+
 def next_build_number(token, app_id):
     status, payload = request(
         token,
@@ -277,6 +359,15 @@ def prepare(args):
         log("No Apple Distribution identity is in the login keychain. Refusing to create or revoke certificates.")
         sys.exit(1)
     log(f"Distribution certificate already in the keychain: {identity}")
+    certificate = find_distribution_certificate(token)
+    if certificate is None:
+        log("The API did not list an Apple Distribution certificate. Refusing to create one.")
+        sys.exit(1)
+    log(f"Using existing distribution certificate {certificate['id']}.")
+    profile = ensure_profile(token, bundle, certificate)
+    profile_name = None if profile is None else profile.get("attributes", {}).get("name")
+    if profile is None:
+        log("No App Store provisioning profile is available. Automatic cloud signing is also unavailable to this API key.")
     app = require_app(token)
     group = ensure_beta_group(token, app)
     build_number = next_build_number(token, app["id"])
@@ -293,6 +384,8 @@ def prepare(args):
         "betaGroupHasAccessToAllBuilds": None
         if group is None
         else group.get("attributes", {}).get("hasAccessToAllBuilds"),
+        "profileName": profile_name,
+        "certificateId": certificate["id"],
     }
     json.dump(result, sys.stdout)
     sys.stdout.write("\n")
