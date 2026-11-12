@@ -1,10 +1,17 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Where the navigation stack goes: a take into the editor, or a take's
+/// folder into the play mode.
+enum Route: Hashable {
+    case take(UUID)
+    case playlist(UUID)
+}
+
 /// Every take, newest first, with a big Record button.
 struct LibraryView: View {
     @Environment(Library.self) private var library
-    @State private var path: [UUID] = []
+    @State private var path: [Route] = []
     @State private var recording = false
     @State private var recorded: UUID?
     @State private var importing = false
@@ -28,10 +35,12 @@ struct LibraryView: View {
                         .listRowBackground(Color.white)
                         .swipeActions {
                             Button(role: .destructive) { deleting = take } label: { Label("Delete", systemImage: "trash") }
+                            Button { playFolder(take) } label: { Label("Play", systemImage: "play.circle") }.tint(.green)
                             Button { rename(take) } label: { Label("Rename", systemImage: "pencil") }.tint(.orange)
                         }
                         .contextMenu {
                             Button("Rename…", systemImage: "pencil") { rename(take) }
+                            Button("Play Folder…", systemImage: "play.circle") { playFolder(take) }
                             Button("Delete", systemImage: "trash", role: .destructive) { deleting = take }
                         }
                 }
@@ -52,8 +61,13 @@ struct LibraryView: View {
                 RecordBar { recording = true }
             }
             .navigationTitle("Kool Edit")
-            .navigationDestination(for: UUID.self) { id in
-                EditorScreen(takeID: id, onAdvance: advance)
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .take(let id):
+                    EditorScreen(takeID: id, onAdvance: advance)
+                case .playlist(let id):
+                    PlaylistScreen(seedID: id, onOpenInEditor: { takeID in path.append(.take(takeID)) })
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -104,14 +118,24 @@ struct LibraryView: View {
     private func openRecorded() {
         guard let id = recorded else { return }
         recorded = nil
-        path = [id]
+        path = [.take(id)]
+    }
+
+    /// Into the play mode for `take`'s folder (or just `take` on its own).
+    private func playFolder(_ take: Take) {
+        path.append(.playlist(take.id))
     }
 
     /// The take before this one finished: mark this one to start playing the
-    /// moment it opens, and swap the editor over to it.
+    /// moment it opens, and swap the top of the stack over to it (so a
+    /// playlist pushed underneath stays where it is).
     private func advance(to id: UUID) {
         library.requestChainPlay(id)
-        path = [id]
+        if path.isEmpty {
+            path = [.take(id)]
+        } else {
+            path[path.count - 1] = .take(id)
+        }
     }
 }
 
@@ -147,7 +171,7 @@ private struct TakeRow: View {
 }
 
 /// The take list's thumbnail waveform.
-private struct MiniWave: View {
+struct MiniWave: View {
     let overview: [UInt8]
 
     var body: some View {

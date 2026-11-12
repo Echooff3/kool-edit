@@ -37,6 +37,12 @@ moments, and sharing just those bits.
   imported as a group, in the folder's own order, and when one take plays to
   its end (with Loop off) the next one opens and plays, like the macOS
   app's folder playback. A take that came in on its own just stops.
+- **Playlists** (Play Folder… on a take): a play mode listing the folder's
+  takes with checkmarks — pick the ones you want, hit Play, and they run in
+  order, one into the next, wrapping back to the first while Loop Playlist is
+  on (it's on by default). Tap a take to play from there, Previous/Next skips
+  through the picks, and **Open in Editor** jumps into the editor for what's
+  playing — the playlist stays in the stack underneath.
 
 ## Touch
 

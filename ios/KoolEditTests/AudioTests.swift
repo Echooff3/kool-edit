@@ -245,6 +245,36 @@ struct EditTests {
     }
 }
 
+struct PlaylistTests {
+    /// The list plays the picked takes in the folder's order, wrapping when
+    /// Loop is on, and skipping ones that aren't picked.
+    @Test @MainActor func picksPlayInOrderAndWrap() throws {
+        let take = { (n: Int) in
+            Take(info: TakeInfo(
+                id: UUID(), name: "Take \(n)", created: Date(), audioFile: Take.firstAudioFile,
+                frames: 100, sampleRate: 44_100, channels: 2, markers: [], overview: [],
+                group: UUID(), groupOrder: n), folder: URL(fileURLWithPath: "/dev/null/\(n)"))
+        }
+        let takes = [take(0), take(1), take(2), take(3)]
+        let model = PlaylistModel(takes: takes)
+        #expect(model.pickedIndices == [0, 1, 2, 3])
+        #expect(model.next(after: 1) == 2)
+        #expect(model.next(after: 3) == 0)
+        #expect(model.previous(before: 0) == 3)
+        model.loop = false
+        #expect(model.next(after: 3) == nil)
+        #expect(model.previous(before: 0) == nil)
+
+        model.loop = true
+        model.picked.subtract([takes[1].id, takes[3].id])
+        #expect(model.pickedIndices == [0, 2])
+        #expect(model.next(after: 0) == 2)
+        #expect(model.next(after: 2) == 0)
+        #expect(model.next(after: 1) == 2)
+        #expect(model.previous(before: 2) == 0)
+    }
+}
+
 struct ExportTests {
     @Test func wavHoldsExactlyTheSelection() throws {
         let source = try audioFile(ramp(48_000))

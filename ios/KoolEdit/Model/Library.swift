@@ -157,12 +157,18 @@ final class Library {
 
     /// The take after `take` in its import group, if any (and `take` has one).
     func nextInGroup(after take: Take) -> Take? {
-        guard let group = take.info.group else { return nil }
-        let ordered = takes
+        let ordered = groupOf(take)
+        guard let i = ordered.firstIndex(where: { $0.id == take.id }), i + 1 < ordered.count else { return nil }
+        return ordered[i + 1]
+    }
+
+    /// The takes imported from the same folder as `take` (or just `take`
+    /// alone), in the folder's own order — a playlist.
+    func groupOf(_ take: Take) -> [Take] {
+        guard let group = take.info.group else { return [take] }
+        return takes
             .filter { $0.info.group == group }
             .sorted { ($0.info.groupOrder ?? 0) < ($1.info.groupOrder ?? 0) }
-        guard let i = ordered.firstIndex(where: { $0.id == take.id }) else { return nil }
-        return i + 1 < ordered.count ? ordered[i + 1] : nil
     }
 
     /// Marks `id` as the take to start playing as soon as it opens (the
