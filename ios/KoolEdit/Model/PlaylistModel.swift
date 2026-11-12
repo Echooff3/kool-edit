@@ -19,6 +19,10 @@ final class PlaylistModel {
     /// Where playing has got to (an index into `takes`), or nil when stopped.
     private(set) var current: Int?
     let player = Player()
+    /// Where playback was paused inside the current take, if it was.
+    private(set) var pausedAtFrame: Int64?
+
+    var isPaused: Bool { pausedAtFrame != nil && !player.isPlaying }
 
     init(takes: [Take], picked: Set<UUID>? = nil) {
         self.takes = takes
@@ -59,10 +63,18 @@ final class PlaylistModel {
     /// Plays from where playing left off, or the first picked take.
     func play() {
         if let current {
-            playCurrent(current)
+            playCurrent(current, from: pausedAtFrame ?? 0)
         } else if let first = pickedIndices.first {
             playCurrent(first)
         }
+    }
+
+    /// Pauses inside the current take (Play resumes from there).
+    func pause() {
+        guard player.isPlaying else { return }
+        pausedAtFrame = player.position
+        player.stop()
+        publish()
     }
 
     /// Plays `take` (wherever it is in the list, picked or not).
@@ -70,21 +82,40 @@ final class PlaylistModel {
         if let i = takes.firstIndex(where: { $0.id == take.id }) { playCurrent(i) }
     }
 
-    func playCurrent(_ index: Int) {
+    func playCurrent(_ index: Int, from start: Int64 = 0) {
         let take = takes[index]
         current = index
+        pausedAtFrame = nil
         do {
             try player.load(take.audioURL)
-            player.play(0..<take.info.frames, from: 0, loop: false)
+            player.play(0..<take.info.frames, from: min(max(0, start), max(0, take.info.frames - 1)), loop: false)
         } catch {
             stop()
         }
+        publish()
     }
 
     func stop() {
         player.stop()
         current = nil
+        pausedAtFrame = nil
+        publish()
     }
+
+    /// Skips to a time in the current take (the car's scrubber).
+    func seek(to seconds: Double) {
+        guard let current else { return }
+        let frame = min(max(0, Int64(seconds * sampleRate)), max(0, takes[current].info.frames - 1))
+        if player.isPlaying {
+            playCurrent(current, from: frame)
+        } else {
+            pausedAtFrame = frame
+            publish()
+        }
+    }
+
+    /// The current take's rate, for turning seconds into frames.
+    private var sampleRate: Double { current.map { takes[$0].info.sampleRate } ?? 44_100 }
 
     /// On to the next picked take (the Player calls this at a take's end).
     private func advance() {
@@ -100,5 +131,37 @@ final class PlaylistModel {
         let base = current ?? 0
         let target = direction < 0 ? previous(before: base) : next(after: base)
         if let target { playCurrent(target) }
+    }
+
+    // MARK: The car and the lock screen
+
+    /// Takes over Now Playing (CarPlay's screen, Control Center, headphone
+    /// buttons) while this playlist is the active player.
+    func claimNowPlaying() {
+        NowPlayingCenter.activate(self, PlaybackCommands(
+            title: { [weak self] in self?.currentTake?.name ?? "Playlist" },
+            duration: { [weak self] in
+                guard let self, let take = self.currentTake else { return 0 }
+                return take.duration
+            },
+            elapsed: { [weak self] in
+                guard let self, let take = self.currentTake else { return 0 }
+                let frame = self.player.isPlaying ? self.player.position : (self.pausedAtFrame ?? 0)
+                return Double(min(max(0, frame), take.info.frames)) / take.info.sampleRate
+            },
+            isPlaying: { [weak self] in self?.player.isPlaying == true },
+            play: { [weak self] in self?.play() },
+            pause: { [weak self] in self?.pause() },
+            stop: { [weak self] in self?.stop() },
+            next: { [weak self] in self?.skip(1) },
+            previous: { [weak self] in self?.skip(-1) },
+            seek: { [weak self] in self?.seek(to: $0) }
+        ))
+    }
+
+    /// Re-publishes the now-playing card after any state change.
+    func publish() {
+        guard NowPlayingCenter.isActive(self) else { return }
+        NowPlayingCenter.refresh()
     }
 }

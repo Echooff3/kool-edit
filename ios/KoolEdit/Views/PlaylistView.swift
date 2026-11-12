@@ -23,6 +23,7 @@ struct PlaylistScreen: View {
         .task {
             guard model == nil, let seed = library.take(seedID) else { return }
             model = PlaylistModel(takes: library.groupOf(seed))
+            model?.claimNowPlaying()
         }
         .onDisappear { model?.stop() }
     }

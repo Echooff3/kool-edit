@@ -78,6 +78,32 @@ final class EditorModel {
 
     func open() async {
         await loadAudio()
+        claimNowPlaying()
+    }
+
+    /// Takes over Now Playing (CarPlay's screen, Control Center, headphone
+    /// buttons) while the editor is the player in front.
+    private func claimNowPlaying() {
+        NowPlayingCenter.activate(self, PlaybackCommands(
+            title: { [weak self] in self?.take.name ?? "Kool Edit" },
+            duration: { [weak self] in self.map { $0.seconds($0.frames) } ?? 0 },
+            elapsed: { [weak self] in
+                guard let self else { return 0 }
+                return self.seconds(min(self.playheadOrCursor, self.frames))
+            },
+            isPlaying: { [weak self] in self?.player.isPlaying == true },
+            play: { [weak self] in self?.play() },
+            pause: { [weak self] in self?.togglePause() },
+            stop: { [weak self] in self?.stop() },
+            next: { [weak self] in self?.nextTake() },
+            previous: { [weak self] in self?.previousBoundary() },
+            seek: { [weak self] in self?.seek(toSeconds: $0) }
+        ))
+    }
+
+    /// Re-publishes the now-playing card after any transport change.
+    private func publish() {
+        if NowPlayingCenter.isActive(self) { NowPlayingCenter.refresh() }
     }
 
     /// Stops playback and drops the versions kept for undo.
@@ -86,6 +112,7 @@ final class EditorModel {
         Library.removeOldVersions(of: take)
         undoStack = []
         redoStack = []
+        NowPlayingCenter.deactivate(self)
     }
 
     private func loadAudio() async {
@@ -173,10 +200,12 @@ final class EditorModel {
     func stop() {
         player.stop()
         pausedAt = nil
+        publish()
     }
 
     func togglePlay() {
         player.isPlaying ? stop() : play()
+        publish()
     }
 
     func togglePause() {
@@ -186,6 +215,7 @@ final class EditorModel {
         } else if pausedAt != nil {
             play()
         }
+        publish()
     }
 
     func toggleLoop() {
@@ -220,6 +250,42 @@ final class EditorModel {
 
     private func restart(at frame: Int64) {
         player.play(selection ?? 0 ..< frames, from: frame, loop: loop)
+    }
+
+    // MARK: What the car asks for
+
+    /// Scrubs to a time (the car's scrubber): seeks when playing, moves the
+    /// cursor when stopped.
+    func seek(toSeconds seconds: Double) {
+        let frame = min(max(0, Int64((seconds * sampleRate).rounded())), frames)
+        if player.isPlaying {
+            cursor = frame
+            restart(at: frame)
+        } else {
+            setCursor(frame)
+        }
+        ensureVisible(frame)
+        publish()
+    }
+
+    /// Next track: the next take in the folder, when there is one.
+    func nextTake() {
+        guard let next = library.nextInGroup(after: take) else { return }
+        library.requestChainPlay(next.id)
+        advance?(next.id)
+    }
+
+    /// Previous track: back to the start, like a music app's first press of
+    /// Previous (a second press, when already at the start, would have
+    /// nothing earlier in a single take).
+    func previousBoundary() {
+        if pausedAt != nil {
+            pausedAt = 0
+            play()
+        } else {
+            toStart()
+        }
+        publish()
     }
 
     // MARK: Cursor and selection

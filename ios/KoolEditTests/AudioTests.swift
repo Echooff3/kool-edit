@@ -302,6 +302,27 @@ struct PlaylistTests {
         model.loop = false
         #expect(model.next(after: 1) == nil)
     }
+
+    /// Pause with nothing playing is a no-op, and stop clears any place.
+    @Test @MainActor func pauseWhenIdleIsANoOp() throws {
+        let make = { (n: Int) in
+            Take(info: TakeInfo(
+                id: UUID(), name: "Take \(n)", created: Date(), audioFile: Take.firstAudioFile,
+                frames: 88_200, sampleRate: 44_100, channels: 2, markers: [], overview: [],
+                group: nil, groupOrder: nil), folder: URL(fileURLWithPath: "/dev/null/\(n)"))
+        }
+        let model = PlaylistModel(takes: [make(0), make(1)])
+        #expect(!model.isPaused)
+        #expect(model.pausedAtFrame == nil)
+        model.pause()
+        #expect(!model.isPaused && model.pausedAtFrame == nil)
+        // Seek with nothing current is a no-op too (the scrubber only
+        // exists while something is playing or paused).
+        model.seek(to: 2.0)
+        #expect(model.pausedAtFrame == nil)
+        model.stop()
+        #expect(model.pausedAtFrame == nil && model.current == nil)
+    }
 }
 
 struct LibraryCleanupTests {

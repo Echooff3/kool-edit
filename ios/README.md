@@ -50,6 +50,13 @@ moments, and sharing just those bits.
   that are the same file imported twice — same name, length and format —
   keeping the original of each; **Delete All Takes** wipes every recording,
   import and edit. Both ask first.
+- **In the car** (CarPlay): the takes as a list — tap one to play it and
+  its whole folder, one into the next — on the car's screen, plus the
+  system Now Playing screen with the scrubber. Even without the CarPlay
+  entitlement, play/pause, next/previous and seek answer on the car's
+  buttons and steering wheel over Bluetooth or USB, and the lock screen
+  and Control Center get the same controls. Pausing the playlist holds
+  its place in the take.
 
 ## Touch
 
@@ -115,3 +122,21 @@ The icon is the macOS one, cropped to fill the square (from the repository root)
 cargo run --release --bin make-icon -- /tmp/kool.iconset
 swift ios/scripts/make-icon.swift /tmp/kool.iconset/icon_512x512@2x.png ios/KoolEdit/Assets.xcassets/AppIcon.appiconset/AppIcon.png
 ```
+
+## CarPlay
+
+The car screen (take list → Now Playing) is wired up in
+`App/CarPlaySceneDelegate.swift` and the scene manifest in
+`Config/Info.plist`, but Apple gates the CarPlay *app* behind the
+`com.apple.developer.carplay-audio` entitlement, which needs approval
+([request it here](https://developer.apple.com/contact/request/carplay-audio/)).
+The entitlement file is ready at `Config/KoolEdit-CarPlay.entitlements`
+but deliberately NOT wired into the target — code signing fails without
+the approved provisioning profile. Once granted, set
+`CODE_SIGN_ENTITLEMENTS = Config/KoolEdit-CarPlay.entitlements` on the
+KoolEdit target (Debug and Release) and the car screen lights up.
+
+Everything short of the car screen works today with no entitlement: play,
+pause, next, previous and seek answer the car's own Now Playing buttons
+and steering-wheel controls (over Bluetooth or USB), plus Control Center
+and the lock screen, through `Model/NowPlaying.swift`.

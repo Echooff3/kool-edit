@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- NOT wired into the project on purpose: adding this entitlement
+	     requires Apple's approval (developer.apple.com/contact/request/
+	     carplay-audio/) and breaks code signing until the provisioning
+	     profile carries it. When it's granted, set
+	       CODE_SIGN_ENTITLEMENTS = Config/KoolEdit-CarPlay.entitlements
+	     on the KoolEdit target (Debug and Release) and the CarPlay scene
+	     activates. Now Playing controls work without it. -->
+	<key>com.apple.developer.carplay-audio</key>
+	<true/>
+</dict>
+</plist>
