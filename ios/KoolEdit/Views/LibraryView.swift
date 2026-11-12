@@ -33,7 +33,7 @@ struct LibraryView: View {
                     .listRowBackground(Theme.face)
                 }
                 ForEach(library.takes) { take in
-                    NavigationLink(value: take.id) { TakeRow(take: take) }
+                    NavigationLink(value: Route.take(take.id)) { TakeRow(take: take) }
                         .listRowBackground(Color.white)
                         .swipeActions {
                             Button(role: .destructive) { deleting = take } label: { Label("Delete", systemImage: "trash") }
