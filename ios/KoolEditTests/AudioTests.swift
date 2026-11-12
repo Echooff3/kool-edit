@@ -206,6 +206,46 @@ struct EditTests {
         #expect(Peaks.read(from: take.peaksURL, frames: 1_000) != nil)
     }
 
+    @Test func importConvertsAnM4A() throws {
+        // An AAC file, as another app might hand over.
+        let m4a = scratch("m4a")
+        do {
+            let file = try AVAudioFile(
+                forWriting: m4a,
+                settings: [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: 44_100,
+                    AVNumberOfChannelsKey: 2,
+                    AVEncoderBitRateKey: 128_000,
+                ],
+                commonFormat: .pcmFormatFloat32, interleaved: false)
+            let buffer = try AudioIO.buffer(file.processingFormat, frames: 1_000)
+            buffer.frameLength = 1_000
+            for c in 0..<2 { for i in 0..<1_000 { buffer.floatChannelData![c][i] = 0.25 } }
+            try file.write(from: buffer)
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let take = try Library.importAudio(m4a, into: root)
+        #expect(take.info.channels == 2 && take.info.sampleRate == 44_100)
+        #expect(abs(take.info.frames - 1_000) < 32) // codec padding
+        #expect(Peaks.read(from: take.peaksURL, frames: take.info.frames) != nil)
+    }
+
+    /// The extension filter (the inbox and the folder import) admits every
+    /// audio extension the README claims — led by the extension list, since
+    /// UTType's mapping of ".m4a"/".mp4" can land on the mpeg-4 *movie*
+    /// type, which is not audio.
+    @Test func extensionFilterAdmitsEveryClaimedAudioType() {
+        for ext in ["wav", "wave", "mp3", "flac", "ogg", "oga", "m4a", "m4v", "mp4", "aac", "aif", "aiff", "aifc", "caf", "mka", "webm"] {
+            #expect(Library.looksLikeAudio(URL(fileURLWithPath: "/tmp/song.\(ext)")), ".\(ext) was kept out")
+            #expect(Library.looksLikeAudio(URL(fileURLWithPath: "/tmp/Song.\(ext.uppercased())")), ".\(ext.uppercased()) was kept out")
+        }
+        // And the gate keeps out what it should.
+        for other in ["txt", "png", "json", "pdf", "mpg", "mov"] {
+            #expect(!Library.looksLikeAudio(URL(fileURLWithPath: "/tmp/file.\(other)")), ".\(other) passed as audio")
+        }
+    }
+
     @Test @MainActor func folderImportsChainedTakes() throws {
         // Two WAVs and a group import, like Import Folder… does.
         let wav = scratch("wav")

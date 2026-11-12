@@ -164,7 +164,7 @@ final class Library {
         var files: [URL] = []
         for folder in [documents, documents.appendingPathComponent("Inbox")] {
             let contents = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-            files += contents.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
+            files += contents.filter(Library.looksLikeAudio)
         }
         importFiles(files, removingOriginals: true)
     }
@@ -181,7 +181,7 @@ final class Library {
             let scoped = url.startAccessingSecurityScopedResource()
             let contents = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? []
             let files = contents
-                .filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
+                .filter(Library.looksLikeAudio)
                 .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
             let group = UUID()
             for (order, file) in files.enumerated() {
@@ -229,6 +229,26 @@ final class Library {
     private var chainPlayID: UUID?
 
     nonisolated static let notImported = "Not Imported"
+
+    /// The extensions the app opens, from the macOS app's list: what the
+    /// Import and Open dialogs go by, and the first word of the README's
+    /// format promises.
+    nonisolated static let audioExtensions: Set<String> = [
+        "wav", "wave", "mp3", "flac", "ogg", "oga", "m4a", "m4v", "mp4", "aac",
+        "aif", "aiff", "aifc", "caf", "mka", "webm",
+    ]
+
+    /// True when `url` looks like audio by its name: the extension is on the
+    /// list, or UTType calls it audio. The extension list leads because the
+    /// system's extension-to-type mapping is unreliable where it matters:
+    /// ".m4a" and ".mp4" can resolve to the mpeg-4 *movie* type, which is
+    /// not audio, and the mapping moves between OS builds — a folder of M4As
+    /// then imports as "no audio files".
+    nonisolated static func looksLikeAudio(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        if !ext.isEmpty && audioExtensions.contains(ext) { return true }
+        return UTType(filenameExtension: url.pathExtension)?.conforms(to: .audio) == true
+    }
 
     /// Moves a file that wouldn't import into Documents/Not Imported.
     nonisolated static func setAside(_ url: URL) -> Bool {
