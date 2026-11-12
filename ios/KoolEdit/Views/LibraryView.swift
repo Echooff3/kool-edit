@@ -8,6 +8,7 @@ struct LibraryView: View {
     @State private var recording = false
     @State private var recorded: UUID?
     @State private var importing = false
+    @State private var importingFolder = false
     @State private var renaming: Take?
     @State private var newName = ""
     @State private var deleting: Take?
@@ -51,14 +52,24 @@ struct LibraryView: View {
                 RecordBar { recording = true }
             }
             .navigationTitle("Kool Edit")
-            .navigationDestination(for: UUID.self) { id in EditorScreen(takeID: id) }
+            .navigationDestination(for: UUID.self) { id in
+                EditorScreen(takeID: id, onAdvance: advance)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Import", systemImage: "square.and.arrow.down") { importing = true }
+                    Menu {
+                        Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
+                        Button("Import Folder…", systemImage: "folder") { importingFolder = true }
+                    } label: {
+                        Label("Import", systemImage: "square.and.arrow.down")
+                    }
                 }
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio], allowsMultipleSelection: true) { result in
                 if case .success(let urls) = result { library.importFiles(urls) }
+            }
+            .fileImporter(isPresented: $importingFolder, allowedContentTypes: [.folder]) { result in
+                if case .success(let url) = result { library.importFolder(url) }
             }
             .fullScreenCover(isPresented: $recording, onDismiss: openRecorded) {
                 RecorderView { take in recorded = take.id }
@@ -93,6 +104,13 @@ struct LibraryView: View {
     private func openRecorded() {
         guard let id = recorded else { return }
         recorded = nil
+        path = [id]
+    }
+
+    /// The take before this one finished: mark this one to start playing the
+    /// moment it opens, and swap the editor over to it.
+    private func advance(to id: UUID) {
+        library.requestChainPlay(id)
         path = [id]
     }
 }

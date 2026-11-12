@@ -205,6 +205,44 @@ struct EditTests {
         #expect(take.info.overview.count == Take.overviewColumns)
         #expect(Peaks.read(from: take.peaksURL, frames: 1_000) != nil)
     }
+
+    @Test @MainActor func folderImportsChainedTakes() throws {
+        // Two WAVs and a group import, like Import Folder… does.
+        let wav = scratch("wav")
+        do {
+            let file = try AVAudioFile(forWriting: wav, settings: AudioIO.pcmSettings(sampleRate: 44_100, channels: 2, bits: 16), commonFormat: .pcmFormatFloat32, interleaved: false)
+            let buffer = try AudioIO.buffer(file.processingFormat, frames: 1_000)
+            buffer.frameLength = 1_000
+            try file.write(from: buffer)
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let group = UUID()
+        let a = try Library.importAudio(wav, into: root, group: (id: group, order: 0))
+        let b = try Library.importAudio(wav, into: root, group: (id: group, order: 1))
+        #expect(a.info.group == group && b.info.group == group && a.info.groupOrder == 0 && b.info.groupOrder == 1)
+
+        let library = Library(root: root)
+        library.add(a)
+        library.add(b)
+        // newest first in the list, but the chain follows the folder's order
+        #expect(library.nextInGroup(after: a)?.id == b.id)
+        #expect(library.nextInGroup(after: b) == nil)
+        // a take on its own has nothing after it
+        let single = try Library.importAudio(wav, into: root)
+        library.add(single)
+        #expect(library.nextInGroup(after: single) == nil)
+        // take.json without group fields still loads (old takes)
+        var old = single.info
+        let data = try JSONEncoder.takes.encode(old)
+        old = try JSONDecoder.takes.decode(TakeInfo.self, from: data)
+        #expect(old.group == nil && old.groupOrder == nil)
+        // and the group fields survive a save and load
+        library.add(a)
+        library.save(a)
+        let loaded = Library(root: root)
+        #expect(loaded.take(a.id)?.info.group == group)
+        try? FileManager.default.removeItem(at: root)
+    }
 }
 
 struct ExportTests {

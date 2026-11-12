@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Opens a take from the library.
+/// Opens a take from the library. `onAdvance` opens the next take of an
+/// import group when this one plays to its end.
 struct EditorScreen: View {
     @Environment(Library.self) private var library
     let takeID: UUID
+    var onAdvance: (UUID) -> Void = { _ in }
     @State private var model: EditorModel?
 
     var body: some View {
@@ -19,8 +21,11 @@ struct EditorScreen: View {
         .task {
             guard model == nil, let take = library.take(takeID) else { return }
             let editor = EditorModel(take: take, library: library)
+            editor.advance = onAdvance
             model = editor
             await editor.open()
+            // Arriving from the take before it: keep the chain going.
+            if library.takeChainPlay(takeID) { editor.play() }
         }
     }
 }

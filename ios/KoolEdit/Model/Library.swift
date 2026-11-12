@@ -78,15 +78,17 @@ final class Library {
 
     // MARK: Importing
 
-    /// Copies audio files in as new takes, in the background.
-    func importFiles(_ urls: [URL], removingOriginals: Bool = false) {
+    /// Copies audio files in as new takes, in the background. Files from one
+    /// folder share `group`, numbered by their place in it.
+    func importFiles(_ urls: [URL], removingOriginals: Bool = false, group: UUID? = nil) {
         let root = self.root
-        for url in urls where !inFlight.contains(url) {
+        for (order, url) in urls.enumerated() where !inFlight.contains(url) {
             inFlight.insert(url)
             importing += 1
+            let groupInfo = group.map { (id: $0, order: Int64(order)) }
             Task.detached(priority: .userInitiated) {
                 let scoped = url.startAccessingSecurityScopedResource()
-                let result = Result { try Library.importAudio(url, into: root) }
+                let result = Result { try Library.importAudio(url, into: root, group: groupInfo) }
                 if scoped { url.stopAccessingSecurityScopedResource() }
                 // A file that wouldn't import is kept, out of the way of the
                 // next look in the inbox.
@@ -122,6 +124,41 @@ final class Library {
         }
         importFiles(files, removingOriginals: true)
     }
+
+    /// Imports every audio file in a picked folder, in the folder's own
+    /// order, as a group that plays one take after another.
+    func importFolder(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        let contents = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? []
+        let files = contents
+            .filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        importFiles(files, group: UUID())
+        if scoped { url.stopAccessingSecurityScopedResource() }
+    }
+
+    /// The take after `take` in its import group, if any (and `take` has one).
+    func nextInGroup(after take: Take) -> Take? {
+        guard let group = take.info.group else { return nil }
+        let ordered = takes
+            .filter { $0.info.group == group }
+            .sorted { ($0.info.groupOrder ?? 0) < ($1.info.groupOrder ?? 0) }
+        guard let i = ordered.firstIndex(where: { $0.id == take.id }) else { return nil }
+        return i + 1 < ordered.count ? ordered[i + 1] : nil
+    }
+
+    /// Marks `id` as the take to start playing as soon as it opens (the
+    /// folder chain handing over from the take before it).
+    func requestChainPlay(_ id: UUID) { chainPlayID = id }
+
+    /// True once for the take marked by `requestChainPlay`; consumes it.
+    func takeChainPlay(_ id: UUID) -> Bool {
+        guard chainPlayID == id else { return false }
+        chainPlayID = nil
+        return true
+    }
+
+    private var chainPlayID: UUID?
 
     nonisolated static let notImported = "Not Imported"
 
@@ -164,7 +201,7 @@ final class Library {
         try JSONEncoder.takes.encode(info).write(to: folder.appendingPathComponent("take.json"), options: .atomic)
     }
 
-    nonisolated static func importAudio(_ url: URL, into root: URL) throws -> Take {
+    nonisolated static func importAudio(_ url: URL, into root: URL, group: (id: UUID, order: Int64)? = nil) throws -> Take {
         let (id, folder) = try makeFolder(in: root)
         do {
             let audio = folder.appendingPathComponent(Take.firstAudioFile)
@@ -174,7 +211,8 @@ final class Library {
             let info = TakeInfo(
                 id: id, name: url.deletingPathExtension().lastPathComponent, created: Date(),
                 audioFile: Take.firstAudioFile, frames: peaks.frames, sampleRate: format.sampleRate,
-                channels: Int(format.channelCount), markers: [], overview: peaks.overview(columns: Take.overviewColumns))
+                channels: Int(format.channelCount), markers: [], overview: peaks.overview(columns: Take.overviewColumns),
+                group: group?.id, groupOrder: group.map { Int($0.order) })
             try write(info, to: folder)
             return Take(info: info, folder: folder)
         } catch {
@@ -193,7 +231,8 @@ final class Library {
             let info = TakeInfo(
                 id: id, name: name, created: Date(), audioFile: Take.firstAudioFile, frames: peaks.frames,
                 sampleRate: take.info.sampleRate, channels: take.info.channels,
-                markers: EditOp.trim(range).moved(take.info.markers), overview: peaks.overview(columns: Take.overviewColumns))
+                markers: EditOp.trim(range).moved(take.info.markers), overview: peaks.overview(columns: Take.overviewColumns),
+                group: nil, groupOrder: nil)
             try write(info, to: folder)
             return Take(info: info, folder: folder)
         } catch {

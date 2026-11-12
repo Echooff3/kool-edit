@@ -20,6 +20,11 @@ struct TakeInfo: Codable, Hashable {
     var markers: [Marker]
     /// A small waveform for the take list, one byte per column.
     var overview: [UInt8]
+    /// Takes imported from the same folder share a group; `groupOrder` is the
+    /// file's place in the folder, so one take can find the next to play.
+    /// Optional so take.json files from before groups load as they were.
+    var group: UUID?
+    var groupOrder: Int?
 }
 
 /// A recording (or imported file): a folder holding its audio, the audio's

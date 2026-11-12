@@ -20,6 +20,9 @@ final class Player {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var tapped = false
     @ObservationIgnored private var observer: NSObjectProtocol?
+    /// Called when playback reaches the end of a non-looping range (not when
+    /// stopped by hand). The folder chain uses it to hand over to the next take.
+    @ObservationIgnored var onReachedEnd: (() -> Void)?
 
     init() {
         engine.attach(node)
@@ -113,6 +116,7 @@ final class Player {
                     } else {
                         self.from = self.range.upperBound
                         self.stop()
+                        self.onReachedEnd?()
                     }
                 }
             }
