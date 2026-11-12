@@ -19,6 +19,8 @@ struct LibraryView: View {
     @State private var renaming: Take?
     @State private var newName = ""
     @State private var deleting: Take?
+    @State private var deduping = false
+    @State private var deletingAll = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -74,6 +76,12 @@ struct LibraryView: View {
                     Menu {
                         Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
                         Button("Import Folder…", systemImage: "folder") { importingFolder = true }
+                        Section {
+                            Button("Delete Duplicates…", systemImage: "doc.on.doc", role: .destructive) { deduping = true }
+                                .disabled(library.duplicates.isEmpty)
+                            Button("Delete All Takes…", systemImage: "trash", role: .destructive) { deletingAll = true }
+                                .disabled(library.takes.isEmpty)
+                        }
                     } label: {
                         Label("Import", systemImage: "square.and.arrow.down")
                     }
@@ -100,6 +108,24 @@ struct LibraryView: View {
                 Button("Delete Take", role: .destructive) { if let deleting { library.delete(deleting.id) } }
             } message: {
                 Text("The recording and its markers are deleted from this device.")
+            }
+            .confirmationDialog(
+                "Delete \(library.duplicates.count) Duplicate\(library.duplicates.count == 1 ? "" : "s")?",
+                isPresented: $deduping,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Duplicates", role: .destructive) {
+                    library.deleteDuplicates()
+                }
+            } message: {
+                Text("Takes with the same name, length and format are the same file imported twice; the originals are kept.")
+            }
+            .confirmationDialog(
+                "Delete All Takes?", isPresented: $deletingAll, titleVisibility: .visible
+            ) {
+                Button("Delete Everything", role: .destructive) { library.deleteAll() }
+            } message: {
+                Text("Every recording, import and edit is deleted from this device. This can't be undone.")
             }
             .alert("Kool Edit", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
                 Button("OK", role: .cancel) {}

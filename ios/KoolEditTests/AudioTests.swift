@@ -304,6 +304,46 @@ struct PlaylistTests {
     }
 }
 
+struct LibraryCleanupTests {
+    /// De-dupe finds takes that are the same file twice (name, length,
+    /// format), keeps one per group, and leaves different takes alone.
+    @Test @MainActor func duplicatesAndDeleteAll() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let make = { (name: String, frames: Int64, rate: Double, created: Date) in
+            let (id, folder) = try Library.makeFolder(in: root)
+            let info = TakeInfo(
+                id: id, name: name, created: created, audioFile: Take.firstAudioFile,
+                frames: frames, sampleRate: rate, channels: 2, markers: [], overview: [],
+                group: nil, groupOrder: nil)
+            try Library.write(info, to: folder)
+            return Take(info: info, folder: folder)
+        }
+        let day = Date(timeIntervalSinceNow: -86_400)
+        // Two copies of "song", one different-length "song", a "other", and a repeat.
+        let a = try make("song", 44_100, 44_100, Date())          // newest copy
+        let b = try make("song", 44_100, 44_100, day)             // the original
+        let c = try make("song", 22_050, 44_100, day)             // same name, different length
+        let d = try make("other", 44_100, 44_100, day)
+        let library = Library(root: root)
+        library.add(a); library.add(b); library.add(c); library.add(d)
+
+        #expect(library.duplicates.count == 1)
+        #expect(library.duplicates.first?.id == a.id) // the newer copy goes
+        let removed = library.deleteDuplicates()
+        #expect(removed == 1)
+        #expect(library.takes.count == 3)
+        #expect(library.takes.contains { $0.id == b.id }) // original kept
+        #expect(library.takes.contains { $0.id == c.id })
+        #expect(library.takes.contains { $0.id == d.id })
+
+        library.deleteAll()
+        #expect(library.takes.isEmpty)
+        let contents = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        #expect(contents.isEmpty)
+        try? FileManager.default.removeItem(at: root)
+    }
+}
+
 struct ExportTests {
     @Test func wavHoldsExactlyTheSelection() throws {
         let source = try audioFile(ramp(48_000))

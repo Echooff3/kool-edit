@@ -76,6 +76,50 @@ final class Library {
         takes.removeAll { $0.id == id }
     }
 
+    // MARK: Cleaning up
+
+    /// Takes that are the same recording twice: matching name, length and
+    /// format. The list is newest-first, so the *last* of each group is the
+    /// original import; the rest came from importing the same file again.
+    func duplicateGroups() -> [[Take]] {
+        var seen: [String: Int] = [:]
+        var groups: [Int: [Take]] = [:]
+        for take in takes {
+            let key = "\(take.info.name)|\(take.info.frames)|\(take.info.sampleRate)|\(take.info.channels)"
+            if let i = seen[key] {
+                groups[i, default: []].append(take)
+            } else {
+                seen[key] = groups.count
+                groups[groups.count] = [take]
+            }
+        }
+        return groups.values.filter { $0.count > 1 }
+    }
+
+    /// The copies to throw away (one kept per group, the original).
+    var duplicates: [Take] {
+        duplicateGroups().flatMap { group in
+            // Newest-first list: keep the last, drop the rest.
+            group.dropLast()
+        }
+    }
+
+    /// Deletes the duplicate imports (the newest copy of each), keeping
+    /// the originals. Returns how many were deleted.
+    @discardableResult
+    func deleteDuplicates() -> Int {
+        let ids = Set(duplicates.map(\.id))
+        for id in ids { delete(id) }
+        return ids.count
+    }
+
+    /// Deletes every take (and with it every recording, import and edit).
+    func deleteAll() {
+        let folders = takes.map(\.folder)
+        takes = []
+        for folder in folders { try? FileManager.default.removeItem(at: folder) }
+    }
+
     // MARK: Importing
 
     /// Copies audio files in as new takes, in the background. Files from one

@@ -46,6 +46,10 @@ moments, and sharing just those bits.
   into the editor for what's playing — the playlist stays in the stack
   underneath. Long names scroll by themselves so you can tell the takes
   apart, in the playlist and the library.
+- **Cleans up** (the Import menu): **Delete Duplicates** throws away takes
+  that are the same file imported twice — same name, length and format —
+  keeping the original of each; **Delete All Takes** wipes every recording,
+  import and edit. Both ask first.
 
 ## Touch
 
