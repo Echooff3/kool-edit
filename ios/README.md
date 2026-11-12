@@ -32,7 +32,9 @@ moments, and sharing just those bits.
   don't click. **Save Selection as New Take** keeps a moment in the library.
 - **Imports** anything iOS can read (WAV, AIFF, MP3, AAC/M4A, ALAC, FLAC,
   CAF) from Files, from "Open in Kool Edit" in other apps, or by dragging
-  files onto the app in Finder's iPhone file sharing.
+  files onto the app in Finder's iPhone file sharing. M4As with an Opus
+  track inside (BandLab/Zoom exports — Apple's audio stack has no Opus
+  decoder) decode through a vendored libopus.
 - **Plays a whole folder** (Import Folder…): the folder's audio files are
   imported as a group, in the folder's own order, and when one take plays to
   its end (with Loop off) the next one opens and plays, like the macOS

@@ -275,6 +275,22 @@ struct M4ATests {
         #expect(url.pathExtension == "m4a")
     }
 
+    /// Opus hiding inside an M4A (the BandLab/Zoom export shape — CoreAudio
+    /// has no Opus decoder): the packets are pulled from the boxes and
+    /// decoded by the vendored libopus. The fixture is a five-second cut of
+    /// a real export.
+    @Test func importOpusInAnM4A() throws {
+        #expect(Opus.isOpusFile(try #require(Bundle(for: AudioTestsAnchor.self).url(forResource: "Mean Streak opus", withExtension: "m4a"))))
+        let url = try #require(Bundle(for: AudioTestsAnchor.self).url(forResource: "Mean Streak opus", withExtension: "m4a"))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let take = try Library.importAudio(url, into: root)
+        #expect(take.info.sampleRate == 48_000 && take.info.channels == 2)
+        // ffmpeg's reference decode of this fixture is 240,648 frames:
+        // 251 packets x 960 less the encoder's 312-sample pre-skip.
+        #expect(abs(take.info.frames - 240_648) < 480, "length \(take.info.frames)")
+        #expect(Peaks.read(from: take.peaksURL, frames: take.info.frames) != nil)
+    }
+
     @Test @MainActor func folderImportsChainedTakes() throws {
         // Two WAVs and a group import, like Import Folder… does.
         let wav = scratch("wav")

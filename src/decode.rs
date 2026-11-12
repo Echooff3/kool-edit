@@ -38,8 +38,10 @@ pub fn load(path: &Path, progress: &AtomicU32) -> Result<Loaded, String> {
     let track_id = track.id;
     let total_frames = track.num_frames;
     // The encoder's pre-skip: samples at the start that aren't part of the
-    // music (Opus always has some). Trimmed off after decoding.
-    let pre_skip = track.delay.unwrap_or(0) as usize;
+    // music (Opus always has some). The container's delay field usually
+    // carries it; Opus also packs it into the dOps sample-entry payload
+    // (extra_data here), which symphonia doesn't lift into `delay`.
+    let mut pre_skip = track.delay.unwrap_or(0) as usize;
     let params = track
         .codec_params
         .as_ref()
@@ -50,6 +52,21 @@ pub fn load(path: &Path, progress: &AtomicU32) -> Result<Loaded, String> {
     // Symphonia demuxes Opus (in MP4/M4A or Ogg) but has no decoder for it,
     // so those packets are decoded by libopus instead.
     let is_opus = params.codec == CODEC_ID_OPUS;
+    if is_opus
+        && pre_skip == 0
+        && let Some(extra) = params.extra_data.as_ref()
+        && extra.len() >= 12
+        && extra[..8] == *b"OpusHead"
+    {
+        // Symphonia hands Opus over as a synthesized Ogg OpusHead:
+        // "OpusHead" version(1) channels(1) preSkip(2) rate(4)… The spec
+        // says little-endian; ffmpeg's muxer (and the BandLab/Zoom exports
+        // through it) writes big-endian. Take the reading inside one Opus
+        // frame (≤ 5760): pre-skip is warm-up, never a third of a second.
+        let be = (extra[10] as usize) << 8 | extra[11] as usize;
+        let le = (extra[11] as usize) << 8 | extra[10] as usize;
+        pre_skip = if be <= 5_760 { be } else { le };
+    }
 
     let codecs = symphonia::default::get_codecs();
     let mut decoder = if is_opus {
@@ -199,7 +216,7 @@ mod tests {
         assert_eq!(loaded.info.codec, "OPUS");
         // Five seconds of music: the pre-skip trim leaves just under 5 s.
         let n = loaded.samples.chans[0].len();
-        assert!(n > 235_000 && n < 245_000, "length {n}");
+        assert!((n as i64 - 240_648).abs() < 480, "length {n}");
         let peak = loaded.samples.chans[0].iter().fold(0.0f32, |a, &v| a.max(v.abs()));
         assert!(peak > 0.05, "too quiet to be real music: {peak}");
         // and the tail too, so it isn't only the first packet

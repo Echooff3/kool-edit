@@ -95,8 +95,12 @@ enum AudioIO {
     }
 
     /// Converts any audio file iOS can read into a take (24-bit CAF, at most
-    /// two channels) and returns its peaks.
+    /// two channels) and returns its peaks. An Opus track inside an M4A —
+    /// CoreAudio has no Opus decoder — goes through the vendored libopus.
     static func convert(_ source: URL, to dest: URL) throws -> Peaks {
+        if Opus.isOpusFile(source) {
+            return try Opus.convert(source, to: dest)
+        }
         let input: AVAudioFile
         do {
             input = try reader(source)

@@ -376,7 +376,22 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = X3LBX8Z44X;
 				ENABLE_PREVIEWS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"OPUS_BUILD=1",
+					"HAVE_LRINT=1",
+					"HAVE_LRINTF=1",
+					"VAR_ARRAYS=1",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/KoolEdit/OpusLib/include",
+					"$(SRCROOT)/KoolEdit/OpusLib/celt",
+					"$(SRCROOT)/KoolEdit/OpusLib/silk",
+					"$(SRCROOT)/KoolEdit/OpusLib/silk/float",
+					"$(SRCROOT)/KoolEdit/OpusLib/src",
+				);
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Kool Edit";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
@@ -393,6 +408,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.trilsoft.kooledit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "KoolEdit/KoolEdit-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -407,7 +423,22 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = X3LBX8Z44X;
 				ENABLE_PREVIEWS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"OPUS_BUILD=1",
+					"HAVE_LRINT=1",
+					"HAVE_LRINTF=1",
+					"VAR_ARRAYS=1",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/KoolEdit/OpusLib/include",
+					"$(SRCROOT)/KoolEdit/OpusLib/celt",
+					"$(SRCROOT)/KoolEdit/OpusLib/silk",
+					"$(SRCROOT)/KoolEdit/OpusLib/silk/float",
+					"$(SRCROOT)/KoolEdit/OpusLib/src",
+				);
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Kool Edit";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
@@ -424,6 +455,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.trilsoft.kooledit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "KoolEdit/KoolEdit-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
