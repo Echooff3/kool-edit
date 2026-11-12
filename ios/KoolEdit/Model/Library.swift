@@ -126,15 +126,33 @@ final class Library {
     }
 
     /// Imports every audio file in a picked folder, in the folder's own
-    /// order, as a group that plays one take after another.
+    /// order, as a group that plays one take after another. The picker's
+    /// permission covers the folder, not its files, so the scope is held
+    /// until the last one is read (releasing it first fails with
+    /// `ExtAudioFileOpenURL` error -54).
     func importFolder(_ url: URL) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        let contents = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? []
-        let files = contents
-            .filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
-            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-        importFiles(files, group: UUID())
-        if scoped { url.stopAccessingSecurityScopedResource() }
+        let root = self.root
+        importing += 1
+        Task.detached(priority: .userInitiated) {
+            let scoped = url.startAccessingSecurityScopedResource()
+            let contents = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? []
+            let files = contents
+                .filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
+                .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            let group = UUID()
+            for (order, file) in files.enumerated() {
+                let result = Result { try Library.importAudio(file, into: root, group: (id: group, order: Int64(order))) }
+                await MainActor.run {
+                    switch result {
+                    case .success(let take): self.add(take)
+                    case .failure(let error):
+                        self.error = "Couldn't import \(file.lastPathComponent): \(error.localizedDescription)"
+                    }
+                }
+            }
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            await MainActor.run { self.importing -= 1 }
+        }
     }
 
     /// The take after `take` in its import group, if any (and `take` has one).
