@@ -29,6 +29,9 @@ const AUDIO_EXTS: &[&str] =
 pub enum Action {
     New,
     Open,
+    OpenFolder,
+    NextFile,
+    PrevFile,
     Save,
     SaveAs,
     SaveSelection,
@@ -86,6 +89,14 @@ struct PlayInfo {
     had_selection: bool,
 }
 
+/// The audio files in a folder opened with Open Folder, in sorted order, and
+/// which one is loaded. The folder keeps playing: when a file finishes (and
+/// Loop is off), the next one loads.
+struct Folder {
+    files: Vec<PathBuf>,
+    index: usize,
+}
+
 #[derive(Default)]
 struct Meter {
     db: [f32; 2],
@@ -128,6 +139,10 @@ pub struct KoolApp {
     show_keys: bool,
     allow_close: bool,
     pending_open: Option<PathBuf>,
+    /// The folder opened with Open Folder, if any.
+    folder: Option<Folder>,
+    /// Play as soon as the next file loads (chaining files in a folder).
+    chain_play: bool,
     title: String,
     default_rx: Option<mpsc::Receiver<Result<String, String>>>,
     #[cfg(feature = "devtools")]
@@ -165,6 +180,8 @@ impl KoolApp {
             show_keys: false,
             allow_close: false,
             pending_open: None,
+            folder: None,
+            chain_play: false,
             title: String::new(),
             default_rx: None,
             #[cfg(feature = "devtools")]
@@ -185,7 +202,7 @@ impl KoolApp {
         app.saved_settings = app.settings.clone();
         app.player.set_gain(settings::volume_to_gain(app.settings.volume_db));
         if let Some(path) = initial {
-            app.start_loading(path, ctx);
+            app.open_path(path, ctx);
         }
         if make_default {
             app.run(Action::MakeDefault, ctx);
@@ -194,7 +211,12 @@ impl KoolApp {
     }
 
     fn set_status(&mut self, msg: impl Into<String>) {
-        self.status = Some((msg.into(), Instant::now()));
+        let msg = msg.into();
+        #[cfg(feature = "devtools")]
+        if self.script.is_some() {
+            eprintln!("devtools: status: {msg}");
+        }
+        self.status = Some((msg, Instant::now()));
     }
 
     fn error(&mut self, title: &str, msg: &str) {
@@ -237,10 +259,59 @@ impl KoolApp {
     // Files
 
     fn open_path(&mut self, path: PathBuf, ctx: &egui::Context) {
+        if path.is_dir() {
+            self.open_folder(path, ctx);
+            return;
+        }
         if !self.confirm_discard() {
             return;
         }
+        // A single file is its own thing; it leaves any folder queue behind.
+        self.folder = None;
         self.start_loading(path, ctx);
+    }
+
+    /// Open every audio file in `dir`, in order, and keep going file to file.
+    fn open_folder(&mut self, dir: PathBuf, ctx: &egui::Context) {
+        if !self.confirm_discard() {
+            return;
+        }
+        let mut files = std::fs::read_dir(&dir)
+            .map(|it| {
+                it.flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.is_file() && has_audio_ext(p))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        files.sort();
+        if files.is_empty() {
+            self.folder = None;
+            self.error("Couldn't open folder", &format!("{}: no audio files", dir.display()));
+            return;
+        }
+        self.folder = Some(Folder { index: 0, files });
+        // Opening a folder means "play it", even with Auto-Play off.
+        self.chain_play = true;
+        self.load_current(ctx);
+    }
+
+    fn load_current(&mut self, ctx: &egui::Context) {
+        let Some(f) = &self.folder else { return };
+        let path = f.files[f.index].clone();
+        self.start_loading(path, ctx);
+    }
+
+    /// Move to the next (+1) or previous (-1) file in the folder, if there is one.
+    fn step_folder(&mut self, dir: i32, ctx: &egui::Context) {
+        let Some(f) = &mut self.folder else { return };
+        let next = f.index as i32 + dir;
+        if next < 0 || next >= f.files.len() as i32 {
+            return;
+        }
+        f.index = next as usize;
+        self.chain_play = true;
+        self.load_current(ctx);
     }
 
     fn start_loading(&mut self, path: PathBuf, ctx: &egui::Context) {
@@ -266,8 +337,11 @@ impl KoolApp {
                 self.anchor = 0;
                 self.view.vzoom = 1.0;
                 self.zoom_full_pending = true;
-                self.set_status(format!("Opened in {:.2} seconds", loading.started.elapsed().as_secs_f64()));
-                if self.settings.auto_play {
+                let place = self.folder.as_ref().map_or(String::new(), |f| format!(" ({} of {})", f.index + 1, f.files.len()));
+                self.set_status(format!("Opened in {:.2} seconds{place}", loading.started.elapsed().as_secs_f64()));
+                let chain = self.chain_play;
+                self.chain_play = false;
+                if self.settings.auto_play || chain {
                     self.play();
                 }
             }
@@ -522,6 +596,17 @@ impl KoolApp {
                     self.open_path(path, ctx);
                 }
             }
+            Action::OpenFolder => {
+                let mut dlg = rfd::FileDialog::new().set_title("Open Folder");
+                if let Some(dir) = self.doc.as_ref().and_then(|d| d.path.as_ref()).and_then(|p| p.parent()) {
+                    dlg = dlg.set_directory(dir);
+                }
+                if let Some(dir) = dlg.pick_folder() {
+                    self.open_folder(dir, ctx);
+                }
+            }
+            Action::NextFile => self.step_folder(1, ctx),
+            Action::PrevFile => self.step_folder(-1, ctx),
             Action::Save => {
                 self.save();
             }
@@ -742,6 +827,16 @@ impl KoolApp {
         if self.player.finished() {
             // Reached the end: leave the cursor where playback started, like Cool Edit.
             self.stop_now();
+            // In a folder (and not looping), the end of a file is just the
+            // seam into the next one.
+            let next = self.folder.as_ref().is_some_and(|f| f.index + 1 < f.files.len());
+            if next {
+                if let Some(f) = &mut self.folder {
+                    f.index += 1;
+                }
+                self.chain_play = true;
+                self.load_current(ctx);
+            }
         }
 
         // Meters: instant attack, ~24 dB/s release, 1.5 s peak hold.
@@ -800,6 +895,7 @@ impl KoolApp {
                 (cmd_shift, Key::S, Action::SaveAs),
                 (cmd, Key::S, Action::Save),
                 (cmd, Key::O, Action::Open),
+                (cmd_shift, Key::O, Action::OpenFolder),
                 (cmd, Key::N, Action::New),
                 (cmd, Key::T, Action::Trim),
                 (cmd, Key::A, Action::SelectAll),
@@ -837,6 +933,9 @@ impl KoolApp {
                 if i.consume_key(none, k) {
                     a.push(if shift { Action::ExtendNudge(dir) } else { Action::Nudge(dir) });
                 }
+                if i.consume_key(Modifiers::COMMAND, k) {
+                    a.push(if dir < 0 { Action::PrevFile } else { Action::NextFile });
+                }
             }
             a
         })
@@ -872,6 +971,7 @@ impl KoolApp {
             ui.menu_button("File", |ui| {
                 item(ui, actions, "New", "⌘N", true, Action::New);
                 item(ui, actions, "Open…", "⌘O", true, Action::Open);
+                item(ui, actions, "Open Folder…", "⇧⌘O", true, Action::OpenFolder);
                 ui.separator();
                 item(ui, actions, "Save", "⌘S", has_doc, Action::Save);
                 item(ui, actions, "Save As…", "⇧⌘S", has_doc, Action::SaveAs);
@@ -926,6 +1026,12 @@ impl KoolApp {
                 item(ui, actions, "Pause", "P", has_audio, Action::Pause);
                 item(ui, actions, "Go to Beginning", "Home", has_audio, Action::ToStart);
                 item(ui, actions, "Go to End", "End", has_audio, Action::ToEnd);
+                ui.separator();
+                let in_folder = self.folder.is_some();
+                let has_next = self.folder.as_ref().is_some_and(|f| f.index + 1 < f.files.len());
+                let has_prev = self.folder.as_ref().is_some_and(|f| f.index > 0);
+                item(ui, actions, "Next File", "⌘→", in_folder && has_next, Action::NextFile);
+                item(ui, actions, "Previous File", "⌘←", in_folder && has_prev, Action::PrevFile);
                 ui.separator();
                 ui.checkbox(&mut self.looping, "Loop Playback  (L)");
                 ui.checkbox(&mut self.settings.auto_play, "Auto-Play on Open");
@@ -1608,6 +1714,8 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("⌘A / Esc", "Select all / deselect"),
     ("⌘Z / ⇧⌘Z", "Undo / Redo"),
     ("⌘O ⌘S ⇧⌘S", "Open / Save / Save As"),
+    ("⇧⌘O", "Open a folder and play it"),
+    ("⌘← ⌘→", "Previous / next file in the folder"),
 ];
 
 fn dialog_frame() -> egui::Frame {
@@ -1639,6 +1747,12 @@ fn is_wav(p: &Path) -> bool {
 
 fn new_source() -> SourceInfo {
     SourceInfo { codec: "PCM".to_owned(), bits: Some(16) }
+}
+
+fn has_audio_ext(p: &Path) -> bool {
+    p.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| AUDIO_EXTS.iter().any(|x| e.eq_ignore_ascii_case(x)))
 }
 
 impl eframe::App for KoolApp {
