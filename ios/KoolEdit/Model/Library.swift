@@ -1,6 +1,9 @@
 import Foundation
 import Observation
+import os
 import UniformTypeIdentifiers
+
+private let libraryLog = Logger(subsystem: "com.trilsoft.kooledit", category: "Library")
 
 /// All the takes, newest first. Each lives in a folder under Application
 /// Support/Takes. Audio files dropped into the app's Documents folder (from
@@ -250,6 +253,27 @@ final class Library {
         return UTType(filenameExtension: url.pathExtension)?.conforms(to: .audio) == true
     }
 
+    /// A coordinated read of `url`, which downloads an iCloud Drive file
+    /// that is still only a placeholder up there before anything tries to
+    /// open it — the file picked from iCloud that hasn't been opened on the
+    /// device yet fails AVAudioFile with "isn't audio that iOS can read".
+    /// A local file goes through unchanged (and un-delayed).
+    nonisolated static func downloaded(_ url: URL) -> URL {
+        var failure: NSError?
+        var resolved: URL?
+        let coordinator = NSFileCoordinator()
+        coordinator.coordinate(readingItemAt: url, options: [], error: &failure) { safe in
+            resolved = safe
+        }
+        if let failure {
+            // Coordinating a plain local file should never fail; if it does,
+            // hand back the original and let the reader report the error.
+            libraryLog.warning("Coordinated read of \(url.lastPathComponent, privacy: .public) failed: \(failure.localizedDescription)")
+            return url
+        }
+        return resolved ?? url
+    }
+
     /// Moves a file that wouldn't import into Documents/Not Imported.
     nonisolated static func setAside(_ url: URL) -> Bool {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -293,7 +317,7 @@ final class Library {
         let (id, folder) = try makeFolder(in: root)
         do {
             let audio = folder.appendingPathComponent(Take.firstAudioFile)
-            let peaks = try AudioIO.convert(url, to: audio)
+            let peaks = try AudioIO.convert(Library.downloaded(url), to: audio)
             try? peaks.write(to: Take.peaksURL(for: audio))
             let format = try AudioIO.reader(audio).fileFormat
             let info = TakeInfo(

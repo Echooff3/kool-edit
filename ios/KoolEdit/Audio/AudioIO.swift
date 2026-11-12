@@ -101,7 +101,11 @@ enum AudioIO {
         do {
             input = try reader(source)
         } catch {
-            throw AudioError.unsupported("It isn't audio that iOS can read.")
+            // Say why it couldn't be read, not just that it couldn't: the
+            // real reason (DRM, still in iCloud, a codec iOS lacks) is what
+            // the user can act on.
+            let reason = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            throw AudioError.unsupported("It isn't audio that iOS can read (\(reason)).")
         }
         let format = input.processingFormat
         guard format.channelCount > 0, format.sampleRate > 0, input.length > 0 else { throw AudioError.empty }

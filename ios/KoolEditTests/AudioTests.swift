@@ -205,7 +205,13 @@ struct EditTests {
         #expect(take.info.overview.count == Take.overviewColumns)
         #expect(Peaks.read(from: take.peaksURL, frames: 1_000) != nil)
     }
+}
 
+/// Every test that encodes or decodes AAC lives here, serialized: the
+/// simulator's ExtAudioFile AAC instances contend when run in parallel and
+/// a test then fails opening a file it just wrote.
+@Suite(.serialized)
+struct M4ATests {
     @Test func importConvertsAnM4A() throws {
         // An AAC file, as another app might hand over.
         let m4a = scratch("m4a")
@@ -244,6 +250,29 @@ struct EditTests {
         for other in ["txt", "png", "json", "pdf", "mpg", "mov"] {
             #expect(!Library.looksLikeAudio(URL(fileURLWithPath: "/tmp/file.\(other)")), ".\(other) passed as audio")
         }
+    }
+
+    /// Real-world M4A encodings (AAC-LC, ALAC, HE-AAC, 256 kbps — fixtures
+    /// written by afconvert, spaces in the names) all import.
+    @Test func importEveryM4AVariant() throws {
+        let bundle = Bundle(for: AudioTestsAnchor.self)
+        let names = ["Mean Streak.m4a", "Mean Streak alac.m4a", "he aac.m4a", "Mean Streak 256.m4a"]
+        for name in names {
+            let url = try #require(bundle.url(forResource: (name as NSString).deletingPathExtension, withExtension: "m4a"), "fixture \(name) missing from the bundle")
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let take = try Library.importAudio(url, into: root)
+            #expect(take.info.channels == 2 && take.info.sampleRate == 48_000, "\(name) metadata wrong")
+            #expect(abs(take.info.frames - 48_000) < 2_100, "\(name) length \(take.info.frames)")
+            #expect(take.info.name == (name as NSString).deletingPathExtension)
+        }
+    }
+
+    @Test func m4aIsAboutTheRightLength() throws {
+        let source = try audioFile((0..<96_000).map { 0.3 * sin(Float($0) * 0.06) })
+        let url = try Exporter.export(source, range: 0..<48_000, format: .m4a, name: "clip", smoothEdges: true)
+        let file = try AVAudioFile(forReading: url)
+        #expect(abs(file.length - 48_000) < 2_048)
+        #expect(url.pathExtension == "m4a")
     }
 
     @Test @MainActor func folderImportsChainedTakes() throws {
@@ -365,6 +394,9 @@ struct PlaylistTests {
     }
 }
 
+/// Only to locate the test bundle's resources.
+private final class AudioTestsAnchor {}
+
 struct LibraryCleanupTests {
     /// De-dupe finds takes that are the same file twice (name, length,
     /// format), keeps one per group, and leaves different takes alone.
@@ -420,14 +452,6 @@ struct ExportTests {
         let url = try Exporter.export(source, range: 0..<48_000, format: .wav24, name: "x", smoothEdges: true)
         let out = try samples(url)
         #expect(abs(out[0]) < 1e-3 && abs(out[47_999]) < 0.01 && abs(out[24_000] - 0.5) < lsb)
-    }
-
-    @Test func m4aIsAboutTheRightLength() throws {
-        let source = try audioFile((0..<96_000).map { 0.3 * sin(Float($0) * 0.06) })
-        let url = try Exporter.export(source, range: 0..<48_000, format: .m4a, name: "clip", smoothEdges: true)
-        let file = try AVAudioFile(forReading: url)
-        #expect(abs(file.length - 48_000) < 2_048)
-        #expect(url.pathExtension == "m4a")
     }
 }
 
