@@ -64,10 +64,8 @@ private struct PlaylistView: View {
                 .background(Color.black)
                 .bevel(raised: false)
             VStack(alignment: .leading, spacing: 4) {
-                Text(take.name)
-                    .font(Theme.font(15))
-                    .foregroundStyle(Theme.text)
-                    .lineLimit(1)
+                MarqueeText(take.name)
+                    .frame(height: 18)
                 HStack(spacing: 10) {
                     Text(TimeFormat.clock(take.duration, decimals: 0)).font(Theme.mono(13))
                     if index == model.current {
@@ -112,6 +110,9 @@ private struct PlaylistView: View {
                 }
                 transportButton("repeat", "Loop Playlist", color: Color(hex: 0x008000), latched: model.loop) {
                     model.loop.toggle()
+                }
+                transportButton("shuffle", "Random Order", color: Color(hex: 0x008000), latched: model.shuffle) {
+                    model.shuffle.toggle()
                 }
                 transportButton("backward.fill", "Previous Take", color: Color(hex: 0x0A246A)) { model.skip(-1) }
                 transportButton("forward.fill", "Next Take", color: Color(hex: 0x0A246A)) { model.skip(1) }

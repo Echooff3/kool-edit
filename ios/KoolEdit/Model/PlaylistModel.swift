@@ -13,6 +13,9 @@ final class PlaylistModel {
     var picked: Set<UUID>
     /// True wraps the list; False stops after the last picked take.
     var loop = true
+    /// True plays the picks in a random order (a fresh pick each time a
+    /// take ends) instead of the folder's.
+    var shuffle = false
     /// Where playing has got to (an index into `takes`), or nil when stopped.
     private(set) var current: Int?
     let player = Player()
@@ -33,16 +36,24 @@ final class PlaylistModel {
     /// What's playing (or about to, when stopped mid-list).
     var currentTake: Take? { current.map { takes[$0] } }
 
-    /// The next picked take after `index`, wrapping when `loop`; nil to stop.
+    /// The next picked take after `index`, wrapping when `loop`; a random
+    /// other pick when `shuffle`; nil to stop.
     func next(after index: Int) -> Int? {
-        if let following = pickedIndices.first(where: { $0 > index }) { return following }
-        return loop ? pickedIndices.first : nil
+        let picks = pickedIndices
+        guard !picks.isEmpty else { return nil }
+        if shuffle, let random = picks.filter({ $0 != index }).randomElement() { return random }
+        if let following = picks.first(where: { $0 > index }) { return following }
+        return loop ? picks.first : nil
     }
 
-    /// The picked take before `index`, wrapping when `loop`; nil at the top.
+    /// The picked take before `index`, wrapping when `loop`; a random other
+    /// pick when `shuffle`; nil at the top.
     func previous(before index: Int) -> Int? {
-        if let preceding = pickedIndices.last(where: { $0 < index }) { return preceding }
-        return loop ? pickedIndices.last : nil
+        let picks = pickedIndices
+        guard !picks.isEmpty else { return nil }
+        if shuffle, let random = picks.filter({ $0 != index }).randomElement() { return random }
+        if let preceding = picks.last(where: { $0 < index }) { return preceding }
+        return loop ? picks.last : nil
     }
 
     /// Plays from where playing left off, or the first picked take.

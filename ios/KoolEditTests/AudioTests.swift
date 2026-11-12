@@ -273,6 +273,35 @@ struct PlaylistTests {
         #expect(model.next(after: 1) == 2)
         #expect(model.previous(before: 2) == 0)
     }
+
+    /// Random order stays on the picks, never repeats the playing take,
+    /// and a single pick keeps the loop going (or stops without it).
+    @Test @MainActor func randomOrderStaysOnThePicks() throws {
+        let take = { (n: Int) in
+            Take(info: TakeInfo(
+                id: UUID(), name: "Take \(n)", created: Date(), audioFile: Take.firstAudioFile,
+                frames: 100, sampleRate: 44_100, channels: 2, markers: [], overview: [],
+                group: UUID(), groupOrder: n), folder: URL(fileURLWithPath: "/dev/null/\(n)"))
+        }
+        let takes = [take(0), take(1), take(2), take(3)]
+        let model = PlaylistModel(takes: takes)
+        model.shuffle = true
+        model.picked = Set([takes[0].id, takes[2].id, takes[3].id])
+        for current in 0..<4 {
+            for _ in 0..<50 {
+                let next = model.next(after: current)
+                #expect(next != nil) // picks remain, loop wraps
+                #expect(model.pickedIndices.contains(next!))
+                #expect(next != current) // never the same take twice in a row
+            }
+        }
+        // One pick: the loop keeps it going, no-loop stops.
+        model.picked = Set([takes[1].id])
+        #expect(model.next(after: 1) == 1)
+        #expect(model.previous(before: 1) == 1)
+        model.loop = false
+        #expect(model.next(after: 1) == nil)
+    }
 }
 
 struct ExportTests {

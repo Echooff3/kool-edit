@@ -40,9 +40,12 @@ moments, and sharing just those bits.
 - **Playlists** (Play Folder… on a take): a play mode listing the folder's
   takes with checkmarks — pick the ones you want, hit Play, and they run in
   order, one into the next, wrapping back to the first while Loop Playlist is
-  on (it's on by default). Tap a take to play from there, Previous/Next skips
-  through the picks, and **Open in Editor** jumps into the editor for what's
-  playing — the playlist stays in the stack underneath.
+  on (it's on by default). **Random Order** shuffles the picks instead: each
+  take that ends hands over to a random other pick. Tap a take to play from
+  there, Previous/Next skips through the picks, and **Open in Editor** jumps
+  into the editor for what's playing — the playlist stays in the stack
+  underneath. Long names scroll by themselves so you can tell the takes
+  apart, in the playlist and the library.
 
 ## Touch
 

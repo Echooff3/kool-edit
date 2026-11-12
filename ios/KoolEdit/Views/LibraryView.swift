@@ -149,10 +149,8 @@ private struct TakeRow: View {
                 .background(Color.black)
                 .bevel(raised: false)
             VStack(alignment: .leading, spacing: 4) {
-                Text(take.name)
-                    .font(Theme.font(15))
-                    .foregroundStyle(Theme.text)
-                    .lineLimit(1)
+                MarqueeText(take.name)
+                    .frame(height: 18)
                 HStack(spacing: 10) {
                     Text(TimeFormat.clock(take.duration, decimals: 0)).font(Theme.mono(13))
                     Text(take.info.created.formatted(date: .abbreviated, time: .shortened))
