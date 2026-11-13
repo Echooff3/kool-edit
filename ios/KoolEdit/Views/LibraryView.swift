@@ -94,27 +94,35 @@ struct LibraryView: View {
                 }
             }
             .toolbar {
-                // One line with the title: the playlist buttons float right,
-                // beside Import; picking swaps them for Play and Cancel.
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if picking {
-                        Button("Cancel") {
-                            picking = false
-                            picked = []
-                        }
-                        Button {
+                // Fixed layout: playlist button left, title middle, Import
+                // right. Picking only swaps the left button's label, so
+                // nothing shifts around.
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button {
+                        if picking {
                             startPickedPlaylist()
-                        } label: {
-                            Label(picked.isEmpty ? "Play" : "Play (\(picked.count))", systemImage: "play.fill")
-                        }
-                        .disabled(picked.isEmpty)
-                    } else {
-                        Button {
+                        } else {
                             picking = true
-                        } label: {
+                        }
+                    } label: {
+                        if picking {
+                            Label(picked.isEmpty ? "Play" : "Play (\(picked.count))", systemImage: "play.fill")
+                        } else {
                             Label("Start Playlist", systemImage: "list.bullet")
                         }
                     }
+                    .disabled(picking && picked.isEmpty)
+                    if picking {
+                        Button {
+                            picking = false
+                            picked = []
+                        } label: {
+                            Image(systemName: "xmark.circle")
+                        }
+                        .accessibilityLabel("Cancel")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
                         Button("Import Folder…", systemImage: "folder") { importingFolder = true }
