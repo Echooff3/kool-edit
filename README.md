@@ -15,7 +15,7 @@ recording, markers and sharing a selection.
 
 ## Features
 
-- **Opens** WAV, AIFF, MP3, FLAC, Ogg Vorbis, M4A (AAC and ALAC) and CAF (decoded with symphonia).
+- **Opens** WAV, AIFF, MP3, FLAC, Ogg Vorbis, Opus (Ogg or in an M4A, decoded by libopus — BandLab/Zoom exports), M4A (AAC and ALAC) and CAF (decoded with symphonia).
 - **Plays** through the default output device, resampling on the fly if the device runs at a
   different rate. Play / Stop / Pause / Loop, rewind and fast-forward (hold), click to seek
   while playing, and the view follows the playhead.

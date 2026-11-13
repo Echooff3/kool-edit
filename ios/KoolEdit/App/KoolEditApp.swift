@@ -1,8 +1,14 @@
 import SwiftUI
 
+/// Every take on the device: one Library shared by the iPhone screen and
+/// the CarPlay screen, so the car sees what the phone has.
+extension Library {
+    static let shared = Library()
+}
+
 @main
 struct KoolEditApp: App {
-    @State private var library = Library()
+    @State private var library = Library.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {

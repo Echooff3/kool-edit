@@ -23,7 +23,7 @@ use crate::wav::{self, WavFormat};
 
 const APP_NAME: &str = "Kool Edit";
 const AUDIO_EXTS: &[&str] =
-    &["wav", "wave", "mp3", "flac", "ogg", "oga", "m4a", "mp4", "aac", "aif", "aiff", "aifc", "caf", "mka", "webm"];
+    &["wav", "wave", "mp3", "flac", "ogg", "oga", "opus", "m4a", "mp4", "aac", "aif", "aiff", "aifc", "caf", "mka", "webm"];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Action {

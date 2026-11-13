@@ -1,11 +1,21 @@
 import SwiftUI
 
-/// The play mode screen: the folder's takes listed for picking, a transport
-/// that plays the picked ones in order (round again with Loop on), and the
+/// Where a playlist's takes come from.
+enum PlaylistSource {
+    /// A take's whole import group (its folder), in the folder's order.
+    case group(UUID)
+    /// Takes picked by hand on the library screen, in the list's order.
+    case picks([UUID])
+}
+
+/// The play mode screen: the takes listed for picking, a transport that
+/// plays the picked ones in order (round again with Loop on), and the
 /// way into the editor for whatever's playing.
 struct PlaylistScreen: View {
     @Environment(Library.self) private var library
-    let seedID: UUID
+    let source: PlaylistSource
+    /// Start playing the moment the list opens (the Start Playlist flow).
+    var autoplay = false
     let onOpenInEditor: (UUID) -> Void
     @State private var model: PlaylistModel?
 
@@ -13,7 +23,7 @@ struct PlaylistScreen: View {
         Group {
             if let model {
                 PlaylistView(model: model, onOpenInEditor: onOpenInEditor)
-            } else if library.take(seedID) == nil {
+            } else if gone {
                 ContentUnavailableView("This take is gone", systemImage: "waveform.slash")
             } else {
                 ProgressView()
@@ -21,11 +31,32 @@ struct PlaylistScreen: View {
         }
         .background(Theme.face)
         .task {
-            guard model == nil, let seed = library.take(seedID) else { return }
-            model = PlaylistModel(takes: library.groupOf(seed))
+            guard model == nil else { return }
+            let takes: [Take]
+            switch source {
+            case .group(let seedID):
+                guard let seed = library.take(seedID) else {
+                    gone = true
+                    return
+                }
+                takes = library.groupOf(seed)
+            case .picks(let ids):
+                let set = Set(ids)
+                takes = library.takes.filter { set.contains($0.id) }
+            }
+            guard !takes.isEmpty else {
+                gone = true
+                return
+            }
+            let playlist = PlaylistModel(takes: takes)
+            model = playlist
+            playlist.claimNowPlaying()
+            if autoplay { playlist.play() }
         }
         .onDisappear { model?.stop() }
     }
+
+    @State private var gone = false
 }
 
 /// The list of takes to pick from, and the transport under it.

@@ -205,6 +205,91 @@ struct EditTests {
         #expect(take.info.overview.count == Take.overviewColumns)
         #expect(Peaks.read(from: take.peaksURL, frames: 1_000) != nil)
     }
+}
+
+/// Every test that encodes or decodes AAC lives here, serialized: the
+/// simulator's ExtAudioFile AAC instances contend when run in parallel and
+/// a test then fails opening a file it just wrote.
+@Suite(.serialized)
+struct M4ATests {
+    @Test func importConvertsAnM4A() throws {
+        // An AAC file, as another app might hand over.
+        let m4a = scratch("m4a")
+        do {
+            let file = try AVAudioFile(
+                forWriting: m4a,
+                settings: [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: 44_100,
+                    AVNumberOfChannelsKey: 2,
+                    AVEncoderBitRateKey: 128_000,
+                ],
+                commonFormat: .pcmFormatFloat32, interleaved: false)
+            let buffer = try AudioIO.buffer(file.processingFormat, frames: 1_000)
+            buffer.frameLength = 1_000
+            for c in 0..<2 { for i in 0..<1_000 { buffer.floatChannelData![c][i] = 0.25 } }
+            try file.write(from: buffer)
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let take = try Library.importAudio(m4a, into: root)
+        #expect(take.info.channels == 2 && take.info.sampleRate == 44_100)
+        #expect(abs(take.info.frames - 1_000) < 32) // codec padding
+        #expect(Peaks.read(from: take.peaksURL, frames: take.info.frames) != nil)
+    }
+
+    /// The extension filter (the inbox and the folder import) admits every
+    /// audio extension the README claims — led by the extension list, since
+    /// UTType's mapping of ".m4a"/".mp4" can land on the mpeg-4 *movie*
+    /// type, which is not audio.
+    @Test func extensionFilterAdmitsEveryClaimedAudioType() {
+        for ext in ["wav", "wave", "mp3", "flac", "ogg", "oga", "m4a", "m4v", "mp4", "aac", "aif", "aiff", "aifc", "caf", "mka", "webm"] {
+            #expect(Library.looksLikeAudio(URL(fileURLWithPath: "/tmp/song.\(ext)")), ".\(ext) was kept out")
+            #expect(Library.looksLikeAudio(URL(fileURLWithPath: "/tmp/Song.\(ext.uppercased())")), ".\(ext.uppercased()) was kept out")
+        }
+        // And the gate keeps out what it should.
+        for other in ["txt", "png", "json", "pdf", "mpg", "mov"] {
+            #expect(!Library.looksLikeAudio(URL(fileURLWithPath: "/tmp/file.\(other)")), ".\(other) passed as audio")
+        }
+    }
+
+    /// Real-world M4A encodings (AAC-LC, ALAC, HE-AAC, 256 kbps — fixtures
+    /// written by afconvert, spaces in the names) all import.
+    @Test func importEveryM4AVariant() throws {
+        let bundle = Bundle(for: AudioTestsAnchor.self)
+        let names = ["Mean Streak.m4a", "Mean Streak alac.m4a", "he aac.m4a", "Mean Streak 256.m4a"]
+        for name in names {
+            let url = try #require(bundle.url(forResource: (name as NSString).deletingPathExtension, withExtension: "m4a"), "fixture \(name) missing from the bundle")
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let take = try Library.importAudio(url, into: root)
+            #expect(take.info.channels == 2 && take.info.sampleRate == 48_000, "\(name) metadata wrong")
+            #expect(abs(take.info.frames - 48_000) < 2_100, "\(name) length \(take.info.frames)")
+            #expect(take.info.name == (name as NSString).deletingPathExtension)
+        }
+    }
+
+    @Test func m4aIsAboutTheRightLength() throws {
+        let source = try audioFile((0..<96_000).map { 0.3 * sin(Float($0) * 0.06) })
+        let url = try Exporter.export(source, range: 0..<48_000, format: .m4a, name: "clip", smoothEdges: true)
+        let file = try AVAudioFile(forReading: url)
+        #expect(abs(file.length - 48_000) < 2_048)
+        #expect(url.pathExtension == "m4a")
+    }
+
+    /// Opus hiding inside an M4A (the BandLab/Zoom export shape — CoreAudio
+    /// has no Opus decoder): the packets are pulled from the boxes and
+    /// decoded by the vendored libopus. The fixture is a five-second cut of
+    /// a real export.
+    @Test func importOpusInAnM4A() throws {
+        #expect(Opus.isOpusFile(try #require(Bundle(for: AudioTestsAnchor.self).url(forResource: "Mean Streak opus", withExtension: "m4a"))))
+        let url = try #require(Bundle(for: AudioTestsAnchor.self).url(forResource: "Mean Streak opus", withExtension: "m4a"))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let take = try Library.importAudio(url, into: root)
+        #expect(take.info.sampleRate == 48_000 && take.info.channels == 2)
+        // ffmpeg's reference decode of this fixture is 240,648 frames:
+        // 251 packets x 960 less the encoder's 312-sample pre-skip.
+        #expect(abs(take.info.frames - 240_648) < 480, "length \(take.info.frames)")
+        #expect(Peaks.read(from: take.peaksURL, frames: take.info.frames) != nil)
+    }
 
     @Test @MainActor func folderImportsChainedTakes() throws {
         // Two WAVs and a group import, like Import Folder… does.
@@ -302,7 +387,31 @@ struct PlaylistTests {
         model.loop = false
         #expect(model.next(after: 1) == nil)
     }
+
+    /// Pause with nothing playing is a no-op, and stop clears any place.
+    @Test @MainActor func pauseWhenIdleIsANoOp() throws {
+        let make = { (n: Int) in
+            Take(info: TakeInfo(
+                id: UUID(), name: "Take \(n)", created: Date(), audioFile: Take.firstAudioFile,
+                frames: 88_200, sampleRate: 44_100, channels: 2, markers: [], overview: [],
+                group: nil, groupOrder: nil), folder: URL(fileURLWithPath: "/dev/null/\(n)"))
+        }
+        let model = PlaylistModel(takes: [make(0), make(1)])
+        #expect(!model.isPaused)
+        #expect(model.pausedAtFrame == nil)
+        model.pause()
+        #expect(!model.isPaused && model.pausedAtFrame == nil)
+        // Seek with nothing current is a no-op too (the scrubber only
+        // exists while something is playing or paused).
+        model.seek(to: 2.0)
+        #expect(model.pausedAtFrame == nil)
+        model.stop()
+        #expect(model.pausedAtFrame == nil && model.current == nil)
+    }
 }
+
+/// Only to locate the test bundle's resources.
+private final class AudioTestsAnchor {}
 
 struct LibraryCleanupTests {
     /// De-dupe finds takes that are the same file twice (name, length,
@@ -359,14 +468,6 @@ struct ExportTests {
         let url = try Exporter.export(source, range: 0..<48_000, format: .wav24, name: "x", smoothEdges: true)
         let out = try samples(url)
         #expect(abs(out[0]) < 1e-3 && abs(out[47_999]) < 0.01 && abs(out[24_000] - 0.5) < lsb)
-    }
-
-    @Test func m4aIsAboutTheRightLength() throws {
-        let source = try audioFile((0..<96_000).map { 0.3 * sin(Float($0) * 0.06) })
-        let url = try Exporter.export(source, range: 0..<48_000, format: .m4a, name: "clip", smoothEdges: true)
-        let file = try AVAudioFile(forReading: url)
-        #expect(abs(file.length - 48_000) < 2_048)
-        #expect(url.pathExtension == "m4a")
     }
 }
 

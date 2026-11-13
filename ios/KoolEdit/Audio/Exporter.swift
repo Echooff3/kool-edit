@@ -74,8 +74,11 @@ enum Exporter {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appendingPathComponent(fileName(name)).appendingPathExtension(format.fileExtension)
-        // Scoped so the file is closed (and complete) before it's shared.
-        do {
+        // The file is closed (and complete) before it's shared. The pool is
+        // what does it: AVAudioFile closes when it is released, and the
+        // autoreleased writer drains at the pool's end, before anything can
+        // read or share the file — scope end alone doesn't guarantee it.
+        try autoreleasepool {
             let output = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
             let fade = smoothEdges ? min(Int64(rate * edgeFade), Int64(range.count) / 2) : 0
             try AudioIO.forEachChunk(of: input, in: range) { buffer, at in

@@ -1,6 +1,9 @@
 import Foundation
 import Observation
+import os
 import UniformTypeIdentifiers
+
+private let libraryLog = Logger(subsystem: "com.trilsoft.kooledit", category: "Library")
 
 /// All the takes, newest first. Each lives in a folder under Application
 /// Support/Takes. Audio files dropped into the app's Documents folder (from
@@ -164,7 +167,7 @@ final class Library {
         var files: [URL] = []
         for folder in [documents, documents.appendingPathComponent("Inbox")] {
             let contents = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-            files += contents.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
+            files += contents.filter(Library.looksLikeAudio)
         }
         importFiles(files, removingOriginals: true)
     }
@@ -181,7 +184,7 @@ final class Library {
             let scoped = url.startAccessingSecurityScopedResource()
             let contents = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? []
             let files = contents
-                .filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
+                .filter(Library.looksLikeAudio)
                 .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
             let group = UUID()
             for (order, file) in files.enumerated() {
@@ -230,6 +233,47 @@ final class Library {
 
     nonisolated static let notImported = "Not Imported"
 
+    /// The extensions the app opens, from the macOS app's list: what the
+    /// Import and Open dialogs go by, and the first word of the README's
+    /// format promises.
+    nonisolated static let audioExtensions: Set<String> = [
+        "wav", "wave", "mp3", "flac", "ogg", "oga", "m4a", "m4v", "mp4", "aac",
+        "aif", "aiff", "aifc", "caf", "mka", "webm",
+    ]
+
+    /// True when `url` looks like audio by its name: the extension is on the
+    /// list, or UTType calls it audio. The extension list leads because the
+    /// system's extension-to-type mapping is unreliable where it matters:
+    /// ".m4a" and ".mp4" can resolve to the mpeg-4 *movie* type, which is
+    /// not audio, and the mapping moves between OS builds — a folder of M4As
+    /// then imports as "no audio files".
+    nonisolated static func looksLikeAudio(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        if !ext.isEmpty && audioExtensions.contains(ext) { return true }
+        return UTType(filenameExtension: url.pathExtension)?.conforms(to: .audio) == true
+    }
+
+    /// A coordinated read of `url`, which downloads an iCloud Drive file
+    /// that is still only a placeholder up there before anything tries to
+    /// open it — the file picked from iCloud that hasn't been opened on the
+    /// device yet fails AVAudioFile with "isn't audio that iOS can read".
+    /// A local file goes through unchanged (and un-delayed).
+    nonisolated static func downloaded(_ url: URL) -> URL {
+        var failure: NSError?
+        var resolved: URL?
+        let coordinator = NSFileCoordinator()
+        coordinator.coordinate(readingItemAt: url, options: [], error: &failure) { safe in
+            resolved = safe
+        }
+        if let failure {
+            // Coordinating a plain local file should never fail; if it does,
+            // hand back the original and let the reader report the error.
+            libraryLog.warning("Coordinated read of \(url.lastPathComponent, privacy: .public) failed: \(failure.localizedDescription)")
+            return url
+        }
+        return resolved ?? url
+    }
+
     /// Moves a file that wouldn't import into Documents/Not Imported.
     nonisolated static func setAside(_ url: URL) -> Bool {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -273,7 +317,7 @@ final class Library {
         let (id, folder) = try makeFolder(in: root)
         do {
             let audio = folder.appendingPathComponent(Take.firstAudioFile)
-            let peaks = try AudioIO.convert(url, to: audio)
+            let peaks = try AudioIO.convert(Library.downloaded(url), to: audio)
             try? peaks.write(to: Take.peaksURL(for: audio))
             let format = try AudioIO.reader(audio).fileFormat
             let info = TakeInfo(

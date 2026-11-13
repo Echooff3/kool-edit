@@ -1,11 +1,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Where the navigation stack goes: a take into the editor, or a take's
-/// folder into the play mode.
+/// Where the navigation stack goes: a take into the editor, a take's
+/// folder into the play mode, or a hand-picked list into the play mode.
 enum Route: Hashable {
     case take(UUID)
     case playlist(UUID)
+    case selection([UUID])
 }
 
 /// Every take, newest first, with a big Record button.
@@ -21,6 +22,9 @@ struct LibraryView: View {
     @State private var deleting: Take?
     @State private var deduping = false
     @State private var deletingAll = false
+    /// Building a playlist by hand: rows pick instead of opening.
+    @State private var picking = false
+    @State private var picked: Set<UUID> = []
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -33,18 +37,33 @@ struct LibraryView: View {
                     .listRowBackground(Theme.face)
                 }
                 ForEach(library.takes) { take in
-                    NavigationLink(value: take.id) { TakeRow(take: take) }
+                    if picking {
+                        Button {
+                            if !picked.insert(take.id).inserted { picked.remove(take.id) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: picked.contains(take.id) ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 22))
+                                    .foregroundStyle(picked.contains(take.id) ? Theme.navy : Theme.shadow)
+                                TakeRow(take: take)
+                            }
+                        }
+                        .buttonStyle(.plain)
                         .listRowBackground(Color.white)
-                        .swipeActions {
-                            Button(role: .destructive) { deleting = take } label: { Label("Delete", systemImage: "trash") }
-                            Button { playFolder(take) } label: { Label("Play", systemImage: "play.circle") }.tint(.green)
-                            Button { rename(take) } label: { Label("Rename", systemImage: "pencil") }.tint(.orange)
-                        }
-                        .contextMenu {
-                            Button("Rename…", systemImage: "pencil") { rename(take) }
-                            Button("Play Folder…", systemImage: "play.circle") { playFolder(take) }
-                            Button("Delete", systemImage: "trash", role: .destructive) { deleting = take }
-                        }
+                    } else {
+                        NavigationLink(value: Route.take(take.id)) { TakeRow(take: take) }
+                            .listRowBackground(Color.white)
+                            .swipeActions {
+                                Button(role: .destructive) { deleting = take } label: { Label("Delete", systemImage: "trash") }
+                                Button { playFolder(take) } label: { Label("Play", systemImage: "play.circle") }.tint(.green)
+                                Button { rename(take) } label: { Label("Rename", systemImage: "pencil") }.tint(.orange)
+                            }
+                            .contextMenu {
+                                Button("Rename…", systemImage: "pencil") { rename(take) }
+                                Button("Play Folder…", systemImage: "play.circle") { playFolder(take) }
+                                Button("Delete", systemImage: "trash", role: .destructive) { deleting = take }
+                            }
+                    }
                 }
             }
             .listStyle(.plain)
@@ -63,15 +82,46 @@ struct LibraryView: View {
                 RecordBar { recording = true }
             }
             .navigationTitle("Kool Edit")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .take(let id):
                     EditorScreen(takeID: id, onAdvance: advance)
                 case .playlist(let id):
-                    PlaylistScreen(seedID: id, onOpenInEditor: { takeID in path.append(.take(takeID)) })
+                    PlaylistScreen(source: .group(id), onOpenInEditor: { takeID in path.append(.take(takeID)) })
+                case .selection(let ids):
+                    PlaylistScreen(source: .picks(ids), autoplay: true, onOpenInEditor: { takeID in path.append(.take(takeID)) })
                 }
             }
             .toolbar {
+                // Fixed layout: playlist button left, title middle, Import
+                // right. Picking only swaps the left button's label, so
+                // nothing shifts around.
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button {
+                        if picking {
+                            startPickedPlaylist()
+                        } else {
+                            picking = true
+                        }
+                    } label: {
+                        if picking {
+                            Label(picked.isEmpty ? "Play" : "Play (\(picked.count))", systemImage: "play.fill")
+                        } else {
+                            Label("Start Playlist", systemImage: "list.bullet")
+                        }
+                    }
+                    .disabled(picking && picked.isEmpty)
+                    if picking {
+                        Button {
+                            picking = false
+                            picked = []
+                        } label: {
+                            Image(systemName: "xmark.circle")
+                        }
+                        .accessibilityLabel("Cancel")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
@@ -150,6 +200,16 @@ struct LibraryView: View {
     /// Into the play mode for `take`'s folder (or just `take` on its own).
     private func playFolder(_ take: Take) {
         path.append(.playlist(take.id))
+    }
+
+    /// The picked takes become the playlist, in the list's order, and it
+    /// starts playing straight away.
+    private func startPickedPlaylist() {
+        guard !picked.isEmpty else { return }
+        let ids = library.takes.filter { picked.contains($0.id) }.map(\.id)
+        picking = false
+        picked = []
+        path.append(.selection(ids))
     }
 
     /// The take before this one finished: mark this one to start playing the
