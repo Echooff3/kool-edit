@@ -133,7 +133,8 @@ final class Recorder {
         let info = TakeInfo(
             id: takeID, name: Take.defaultName(started), created: started, audioFile: Take.firstAudioFile,
             frames: frames, sampleRate: sampleRate, channels: channels,
-            markers: markers.filter { $0.frame < frames }, overview: peaks.overview(columns: Take.overviewColumns))
+            markers: markers.filter { $0.frame < frames }, overview: peaks.overview(columns: Take.overviewColumns),
+            group: nil, groupOrder: nil)
         do {
             try Library.write(info, to: folder)
         } catch {

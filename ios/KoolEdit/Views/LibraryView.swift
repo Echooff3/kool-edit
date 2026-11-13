@@ -1,16 +1,26 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Where the navigation stack goes: a take into the editor, or a take's
+/// folder into the play mode.
+enum Route: Hashable {
+    case take(UUID)
+    case playlist(UUID)
+}
+
 /// Every take, newest first, with a big Record button.
 struct LibraryView: View {
     @Environment(Library.self) private var library
-    @State private var path: [UUID] = []
+    @State private var path: [Route] = []
     @State private var recording = false
     @State private var recorded: UUID?
     @State private var importing = false
+    @State private var importingFolder = false
     @State private var renaming: Take?
     @State private var newName = ""
     @State private var deleting: Take?
+    @State private var deduping = false
+    @State private var deletingAll = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -27,10 +37,12 @@ struct LibraryView: View {
                         .listRowBackground(Color.white)
                         .swipeActions {
                             Button(role: .destructive) { deleting = take } label: { Label("Delete", systemImage: "trash") }
+                            Button { playFolder(take) } label: { Label("Play", systemImage: "play.circle") }.tint(.green)
                             Button { rename(take) } label: { Label("Rename", systemImage: "pencil") }.tint(.orange)
                         }
                         .contextMenu {
                             Button("Rename…", systemImage: "pencil") { rename(take) }
+                            Button("Play Folder…", systemImage: "play.circle") { playFolder(take) }
                             Button("Delete", systemImage: "trash", role: .destructive) { deleting = take }
                         }
                 }
@@ -51,14 +63,35 @@ struct LibraryView: View {
                 RecordBar { recording = true }
             }
             .navigationTitle("Kool Edit")
-            .navigationDestination(for: UUID.self) { id in EditorScreen(takeID: id) }
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .take(let id):
+                    EditorScreen(takeID: id, onAdvance: advance)
+                case .playlist(let id):
+                    PlaylistScreen(seedID: id, onOpenInEditor: { takeID in path.append(.take(takeID)) })
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Import", systemImage: "square.and.arrow.down") { importing = true }
+                    Menu {
+                        Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
+                        Button("Import Folder…", systemImage: "folder") { importingFolder = true }
+                        Section {
+                            Button("Delete Duplicates…", systemImage: "doc.on.doc", role: .destructive) { deduping = true }
+                                .disabled(library.duplicates.isEmpty)
+                            Button("Delete All Takes…", systemImage: "trash", role: .destructive) { deletingAll = true }
+                                .disabled(library.takes.isEmpty)
+                        }
+                    } label: {
+                        Label("Import", systemImage: "square.and.arrow.down")
+                    }
                 }
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio], allowsMultipleSelection: true) { result in
                 if case .success(let urls) = result { library.importFiles(urls) }
+            }
+            .fileImporter(isPresented: $importingFolder, allowedContentTypes: [.folder]) { result in
+                if case .success(let url) = result { library.importFolder(url) }
             }
             .fullScreenCover(isPresented: $recording, onDismiss: openRecorded) {
                 RecorderView { take in recorded = take.id }
@@ -75,6 +108,24 @@ struct LibraryView: View {
                 Button("Delete Take", role: .destructive) { if let deleting { library.delete(deleting.id) } }
             } message: {
                 Text("The recording and its markers are deleted from this device.")
+            }
+            .confirmationDialog(
+                "Delete \(library.duplicates.count) Duplicate\(library.duplicates.count == 1 ? "" : "s")?",
+                isPresented: $deduping,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Duplicates", role: .destructive) {
+                    library.deleteDuplicates()
+                }
+            } message: {
+                Text("Takes with the same name, length and format are the same file imported twice; the originals are kept.")
+            }
+            .confirmationDialog(
+                "Delete All Takes?", isPresented: $deletingAll, titleVisibility: .visible
+            ) {
+                Button("Delete Everything", role: .destructive) { library.deleteAll() }
+            } message: {
+                Text("Every recording, import and edit is deleted from this device. This can't be undone.")
             }
             .alert("Kool Edit", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
                 Button("OK", role: .cancel) {}
@@ -93,7 +144,24 @@ struct LibraryView: View {
     private func openRecorded() {
         guard let id = recorded else { return }
         recorded = nil
-        path = [id]
+        path = [.take(id)]
+    }
+
+    /// Into the play mode for `take`'s folder (or just `take` on its own).
+    private func playFolder(_ take: Take) {
+        path.append(.playlist(take.id))
+    }
+
+    /// The take before this one finished: mark this one to start playing the
+    /// moment it opens, and swap the top of the stack over to it (so a
+    /// playlist pushed underneath stays where it is).
+    private func advance(to id: UUID) {
+        library.requestChainPlay(id)
+        if path.isEmpty {
+            path = [.take(id)]
+        } else {
+            path[path.count - 1] = .take(id)
+        }
     }
 }
 
@@ -107,10 +175,8 @@ private struct TakeRow: View {
                 .background(Color.black)
                 .bevel(raised: false)
             VStack(alignment: .leading, spacing: 4) {
-                Text(take.name)
-                    .font(Theme.font(15))
-                    .foregroundStyle(Theme.text)
-                    .lineLimit(1)
+                MarqueeText(take.name)
+                    .frame(height: 18)
                 HStack(spacing: 10) {
                     Text(TimeFormat.clock(take.duration, decimals: 0)).font(Theme.mono(13))
                     Text(take.info.created.formatted(date: .abbreviated, time: .shortened))
@@ -129,7 +195,7 @@ private struct TakeRow: View {
 }
 
 /// The take list's thumbnail waveform.
-private struct MiniWave: View {
+struct MiniWave: View {
     let overview: [UInt8]
 
     var body: some View {

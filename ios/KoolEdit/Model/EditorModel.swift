@@ -40,7 +40,17 @@ final class EditorModel {
     init(take: Take, library: Library) {
         self.take = take
         self.library = library
+        // When this take plays to its end (and Loop is off), hand over to the
+        // next take imported from the same folder, like the macOS app's folder
+        // queue. Single takes (no group) just stop.
+        player.onReachedEnd = { [weak self] in
+            guard let self, !self.loop, let next = self.library.nextInGroup(after: self.take) else { return }
+            self.advance?(next.id)
+        }
     }
+
+    /// Set by EditorScreen: opens and plays the next take in the group.
+    var advance: ((UUID) -> Void)?
 
     var frames: Int64 { take.info.frames }
     var sampleRate: Double { take.info.sampleRate }

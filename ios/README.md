@@ -33,6 +33,23 @@ moments, and sharing just those bits.
 - **Imports** anything iOS can read (WAV, AIFF, MP3, AAC/M4A, ALAC, FLAC,
   CAF) from Files, from "Open in Kool Edit" in other apps, or by dragging
   files onto the app in Finder's iPhone file sharing.
+- **Plays a whole folder** (Import Folder…): the folder's audio files are
+  imported as a group, in the folder's own order, and when one take plays to
+  its end (with Loop off) the next one opens and plays, like the macOS
+  app's folder playback. A take that came in on its own just stops.
+- **Playlists** (Play Folder… on a take): a play mode listing the folder's
+  takes with checkmarks — pick the ones you want, hit Play, and they run in
+  order, one into the next, wrapping back to the first while Loop Playlist is
+  on (it's on by default). **Random Order** shuffles the picks instead: each
+  take that ends hands over to a random other pick. Tap a take to play from
+  there, Previous/Next skips through the picks, and **Open in Editor** jumps
+  into the editor for what's playing — the playlist stays in the stack
+  underneath. Long names scroll by themselves so you can tell the takes
+  apart, in the playlist and the library.
+- **Cleans up** (the Import menu): **Delete Duplicates** throws away takes
+  that are the same file imported twice — same name, length and format —
+  keeping the original of each; **Delete All Takes** wipes every recording,
+  import and edit. Both ask first.
 
 ## Touch
 

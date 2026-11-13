@@ -76,17 +76,63 @@ final class Library {
         takes.removeAll { $0.id == id }
     }
 
+    // MARK: Cleaning up
+
+    /// Takes that are the same recording twice: matching name, length and
+    /// format. The list is newest-first, so the *last* of each group is the
+    /// original import; the rest came from importing the same file again.
+    func duplicateGroups() -> [[Take]] {
+        var seen: [String: Int] = [:]
+        var groups: [Int: [Take]] = [:]
+        for take in takes {
+            let key = "\(take.info.name)|\(take.info.frames)|\(take.info.sampleRate)|\(take.info.channels)"
+            if let i = seen[key] {
+                groups[i, default: []].append(take)
+            } else {
+                seen[key] = groups.count
+                groups[groups.count] = [take]
+            }
+        }
+        return groups.values.filter { $0.count > 1 }
+    }
+
+    /// The copies to throw away (one kept per group, the original).
+    var duplicates: [Take] {
+        duplicateGroups().flatMap { group in
+            // Newest-first list: keep the last, drop the rest.
+            group.dropLast()
+        }
+    }
+
+    /// Deletes the duplicate imports (the newest copy of each), keeping
+    /// the originals. Returns how many were deleted.
+    @discardableResult
+    func deleteDuplicates() -> Int {
+        let ids = Set(duplicates.map(\.id))
+        for id in ids { delete(id) }
+        return ids.count
+    }
+
+    /// Deletes every take (and with it every recording, import and edit).
+    func deleteAll() {
+        let folders = takes.map(\.folder)
+        takes = []
+        for folder in folders { try? FileManager.default.removeItem(at: folder) }
+    }
+
     // MARK: Importing
 
-    /// Copies audio files in as new takes, in the background.
-    func importFiles(_ urls: [URL], removingOriginals: Bool = false) {
+    /// Copies audio files in as new takes, in the background. Files from one
+    /// folder share `group`, numbered by their place in it.
+    func importFiles(_ urls: [URL], removingOriginals: Bool = false, group: UUID? = nil) {
         let root = self.root
-        for url in urls where !inFlight.contains(url) {
+        for (order, url) in urls.enumerated() where !inFlight.contains(url) {
             inFlight.insert(url)
             importing += 1
+            let groupInfo = group.map { (id: $0, order: Int64(order)) }
             Task.detached(priority: .userInitiated) {
                 let scoped = url.startAccessingSecurityScopedResource()
-                let result = Result { try Library.importAudio(url, into: root) }
+                let result = Result { try Library.importAudio(url, into: root, group: groupInfo) }
                 if scoped { url.stopAccessingSecurityScopedResource() }
                 // A file that wouldn't import is kept, out of the way of the
                 // next look in the inbox.
@@ -122,6 +168,65 @@ final class Library {
         }
         importFiles(files, removingOriginals: true)
     }
+
+    /// Imports every audio file in a picked folder, in the folder's own
+    /// order, as a group that plays one take after another. The picker's
+    /// permission covers the folder, not its files, so the scope is held
+    /// until the last one is read (releasing it first fails with
+    /// `ExtAudioFileOpenURL` error -54).
+    func importFolder(_ url: URL) {
+        let root = self.root
+        importing += 1
+        Task.detached(priority: .userInitiated) {
+            let scoped = url.startAccessingSecurityScopedResource()
+            let contents = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? []
+            let files = contents
+                .filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .audio) == true }
+                .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            let group = UUID()
+            for (order, file) in files.enumerated() {
+                let result = Result { try Library.importAudio(file, into: root, group: (id: group, order: Int64(order))) }
+                await MainActor.run {
+                    switch result {
+                    case .success(let take): self.add(take)
+                    case .failure(let error):
+                        self.error = "Couldn't import \(file.lastPathComponent): \(error.localizedDescription)"
+                    }
+                }
+            }
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            await MainActor.run { self.importing -= 1 }
+        }
+    }
+
+    /// The take after `take` in its import group, if any (and `take` has one).
+    func nextInGroup(after take: Take) -> Take? {
+        let ordered = groupOf(take)
+        guard let i = ordered.firstIndex(where: { $0.id == take.id }), i + 1 < ordered.count else { return nil }
+        return ordered[i + 1]
+    }
+
+    /// The takes imported from the same folder as `take` (or just `take`
+    /// alone), in the folder's own order — a playlist.
+    func groupOf(_ take: Take) -> [Take] {
+        guard let group = take.info.group else { return [take] }
+        return takes
+            .filter { $0.info.group == group }
+            .sorted { ($0.info.groupOrder ?? 0) < ($1.info.groupOrder ?? 0) }
+    }
+
+    /// Marks `id` as the take to start playing as soon as it opens (the
+    /// folder chain handing over from the take before it).
+    func requestChainPlay(_ id: UUID) { chainPlayID = id }
+
+    /// True once for the take marked by `requestChainPlay`; consumes it.
+    func takeChainPlay(_ id: UUID) -> Bool {
+        guard chainPlayID == id else { return false }
+        chainPlayID = nil
+        return true
+    }
+
+    private var chainPlayID: UUID?
 
     nonisolated static let notImported = "Not Imported"
 
@@ -164,7 +269,7 @@ final class Library {
         try JSONEncoder.takes.encode(info).write(to: folder.appendingPathComponent("take.json"), options: .atomic)
     }
 
-    nonisolated static func importAudio(_ url: URL, into root: URL) throws -> Take {
+    nonisolated static func importAudio(_ url: URL, into root: URL, group: (id: UUID, order: Int64)? = nil) throws -> Take {
         let (id, folder) = try makeFolder(in: root)
         do {
             let audio = folder.appendingPathComponent(Take.firstAudioFile)
@@ -174,7 +279,8 @@ final class Library {
             let info = TakeInfo(
                 id: id, name: url.deletingPathExtension().lastPathComponent, created: Date(),
                 audioFile: Take.firstAudioFile, frames: peaks.frames, sampleRate: format.sampleRate,
-                channels: Int(format.channelCount), markers: [], overview: peaks.overview(columns: Take.overviewColumns))
+                channels: Int(format.channelCount), markers: [], overview: peaks.overview(columns: Take.overviewColumns),
+                group: group?.id, groupOrder: group.map { Int($0.order) })
             try write(info, to: folder)
             return Take(info: info, folder: folder)
         } catch {
@@ -193,7 +299,8 @@ final class Library {
             let info = TakeInfo(
                 id: id, name: name, created: Date(), audioFile: Take.firstAudioFile, frames: peaks.frames,
                 sampleRate: take.info.sampleRate, channels: take.info.channels,
-                markers: EditOp.trim(range).moved(take.info.markers), overview: peaks.overview(columns: Take.overviewColumns))
+                markers: EditOp.trim(range).moved(take.info.markers), overview: peaks.overview(columns: Take.overviewColumns),
+                group: nil, groupOrder: nil)
             try write(info, to: folder)
             return Take(info: info, folder: folder)
         } catch {

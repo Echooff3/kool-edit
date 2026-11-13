@@ -205,6 +205,143 @@ struct EditTests {
         #expect(take.info.overview.count == Take.overviewColumns)
         #expect(Peaks.read(from: take.peaksURL, frames: 1_000) != nil)
     }
+
+    @Test @MainActor func folderImportsChainedTakes() throws {
+        // Two WAVs and a group import, like Import Folder… does.
+        let wav = scratch("wav")
+        do {
+            let file = try AVAudioFile(forWriting: wav, settings: AudioIO.pcmSettings(sampleRate: 44_100, channels: 2, bits: 16), commonFormat: .pcmFormatFloat32, interleaved: false)
+            let buffer = try AudioIO.buffer(file.processingFormat, frames: 1_000)
+            buffer.frameLength = 1_000
+            try file.write(from: buffer)
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let group = UUID()
+        let a = try Library.importAudio(wav, into: root, group: (id: group, order: 0))
+        let b = try Library.importAudio(wav, into: root, group: (id: group, order: 1))
+        #expect(a.info.group == group && b.info.group == group && a.info.groupOrder == 0 && b.info.groupOrder == 1)
+
+        let library = Library(root: root)
+        library.add(a)
+        library.add(b)
+        // newest first in the list, but the chain follows the folder's order
+        #expect(library.nextInGroup(after: a)?.id == b.id)
+        #expect(library.nextInGroup(after: b) == nil)
+        // a take on its own has nothing after it
+        let single = try Library.importAudio(wav, into: root)
+        library.add(single)
+        #expect(library.nextInGroup(after: single) == nil)
+        // take.json without group fields still loads (old takes)
+        var old = single.info
+        let data = try JSONEncoder.takes.encode(old)
+        old = try JSONDecoder.takes.decode(TakeInfo.self, from: data)
+        #expect(old.group == nil && old.groupOrder == nil)
+        // and the group fields survive a save and load
+        library.add(a)
+        library.save(a)
+        let loaded = Library(root: root)
+        #expect(loaded.take(a.id)?.info.group == group)
+        try? FileManager.default.removeItem(at: root)
+    }
+}
+
+struct PlaylistTests {
+    /// The list plays the picked takes in the folder's order, wrapping when
+    /// Loop is on, and skipping ones that aren't picked.
+    @Test @MainActor func picksPlayInOrderAndWrap() throws {
+        let take = { (n: Int) in
+            Take(info: TakeInfo(
+                id: UUID(), name: "Take \(n)", created: Date(), audioFile: Take.firstAudioFile,
+                frames: 100, sampleRate: 44_100, channels: 2, markers: [], overview: [],
+                group: UUID(), groupOrder: n), folder: URL(fileURLWithPath: "/dev/null/\(n)"))
+        }
+        let takes = [take(0), take(1), take(2), take(3)]
+        let model = PlaylistModel(takes: takes)
+        #expect(model.pickedIndices == [0, 1, 2, 3])
+        #expect(model.next(after: 1) == 2)
+        #expect(model.next(after: 3) == 0)
+        #expect(model.previous(before: 0) == 3)
+        model.loop = false
+        #expect(model.next(after: 3) == nil)
+        #expect(model.previous(before: 0) == nil)
+
+        model.loop = true
+        model.picked.subtract([takes[1].id, takes[3].id])
+        #expect(model.pickedIndices == [0, 2])
+        #expect(model.next(after: 0) == 2)
+        #expect(model.next(after: 2) == 0)
+        #expect(model.next(after: 1) == 2)
+        #expect(model.previous(before: 2) == 0)
+    }
+
+    /// Random order stays on the picks, never repeats the playing take,
+    /// and a single pick keeps the loop going (or stops without it).
+    @Test @MainActor func randomOrderStaysOnThePicks() throws {
+        let take = { (n: Int) in
+            Take(info: TakeInfo(
+                id: UUID(), name: "Take \(n)", created: Date(), audioFile: Take.firstAudioFile,
+                frames: 100, sampleRate: 44_100, channels: 2, markers: [], overview: [],
+                group: UUID(), groupOrder: n), folder: URL(fileURLWithPath: "/dev/null/\(n)"))
+        }
+        let takes = [take(0), take(1), take(2), take(3)]
+        let model = PlaylistModel(takes: takes)
+        model.shuffle = true
+        model.picked = Set([takes[0].id, takes[2].id, takes[3].id])
+        for current in 0..<4 {
+            for _ in 0..<50 {
+                let next = model.next(after: current)
+                #expect(next != nil) // picks remain, loop wraps
+                #expect(model.pickedIndices.contains(next!))
+                #expect(next != current) // never the same take twice in a row
+            }
+        }
+        // One pick: the loop keeps it going, no-loop stops.
+        model.picked = Set([takes[1].id])
+        #expect(model.next(after: 1) == 1)
+        #expect(model.previous(before: 1) == 1)
+        model.loop = false
+        #expect(model.next(after: 1) == nil)
+    }
+}
+
+struct LibraryCleanupTests {
+    /// De-dupe finds takes that are the same file twice (name, length,
+    /// format), keeps one per group, and leaves different takes alone.
+    @Test @MainActor func duplicatesAndDeleteAll() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let make = { (name: String, frames: Int64, rate: Double, created: Date) in
+            let (id, folder) = try Library.makeFolder(in: root)
+            let info = TakeInfo(
+                id: id, name: name, created: created, audioFile: Take.firstAudioFile,
+                frames: frames, sampleRate: rate, channels: 2, markers: [], overview: [],
+                group: nil, groupOrder: nil)
+            try Library.write(info, to: folder)
+            return Take(info: info, folder: folder)
+        }
+        let day = Date(timeIntervalSinceNow: -86_400)
+        // Two copies of "song", one different-length "song", a "other", and a repeat.
+        let a = try make("song", 44_100, 44_100, Date())          // newest copy
+        let b = try make("song", 44_100, 44_100, day)             // the original
+        let c = try make("song", 22_050, 44_100, day)             // same name, different length
+        let d = try make("other", 44_100, 44_100, day)
+        let library = Library(root: root)
+        library.add(a); library.add(b); library.add(c); library.add(d)
+
+        #expect(library.duplicates.count == 1)
+        #expect(library.duplicates.first?.id == a.id) // the newer copy goes
+        let removed = library.deleteDuplicates()
+        #expect(removed == 1)
+        #expect(library.takes.count == 3)
+        #expect(library.takes.contains { $0.id == b.id }) // original kept
+        #expect(library.takes.contains { $0.id == c.id })
+        #expect(library.takes.contains { $0.id == d.id })
+
+        library.deleteAll()
+        #expect(library.takes.isEmpty)
+        let contents = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        #expect(contents.isEmpty)
+        try? FileManager.default.removeItem(at: root)
+    }
 }
 
 struct ExportTests {

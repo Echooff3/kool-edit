@@ -6,7 +6,9 @@ readout, a classic transport, and level meters along the bottom.
 
 ![Kool Edit](docs/screenshot.png)
 
-One file at a time, no multitrack. Open a file, listen, select, cut/copy/paste/trim, save.
+One file at a time, no multitrack. Open a file, listen, select, cut/copy/paste/trim, save. Or open a whole
+folder (**File ▸ Open Folder**, ⇧⌘O) and Kool Edit plays the audio files in it one after another, with
+⌘← / ⌘→ to step between them.
 
 There's also an iPhone and iPad version in [`ios/`](ios/README.md), built for touch, with
 recording, markers and sharing a selection.
@@ -83,8 +85,10 @@ It registers for MP3, WAV, AIFF/AIFC, FLAC, M4A/AAC, CAF and Ogg. To only build 
 | ⌘A / Esc | Select all / deselect |
 | ⌘Z / ⇧⌘Z | Undo / Redo |
 | ⌘N ⌘O ⌘S ⇧⌘S | New / Open / Save / Save As |
+| ⇧⌘O | Open a folder: play its audio files one after another |
+| ⌘← ⌘→ | Previous / next file in the opened folder |
 
-Drag a file onto the window to open it. Click the level meter to reset the clip lights.
+Drag a file (or a folder) onto the window to open it. Click the level meter to reset the clip lights.
 
 ## Limitations
 
