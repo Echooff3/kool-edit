@@ -82,6 +82,7 @@ struct LibraryView: View {
                 RecordBar { recording = true }
             }
             .navigationTitle("Kool Edit")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .take(let id):
@@ -93,29 +94,27 @@ struct LibraryView: View {
                 }
             }
             .toolbar {
-                ToolbarItemGroup(placement: .topBarLeading) {
-                    Button {
-                        if picking {
-                            startPickedPlaylist()
-                        } else {
-                            picking = true
-                        }
-                    } label: {
-                        if picking {
-                            Label(picked.isEmpty ? "Play" : "Play (\(picked.count))", systemImage: "play.fill")
-                        } else {
-                            Label("Start Playlist", systemImage: "list.bullet")
-                        }
-                    }
-                    .disabled(picking && picked.isEmpty)
+                // One line with the title: the playlist buttons float right,
+                // beside Import; picking swaps them for Play and Cancel.
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     if picking {
                         Button("Cancel") {
                             picking = false
                             picked = []
                         }
+                        Button {
+                            startPickedPlaylist()
+                        } label: {
+                            Label(picked.isEmpty ? "Play" : "Play (\(picked.count))", systemImage: "play.fill")
+                        }
+                        .disabled(picked.isEmpty)
+                    } else {
+                        Button {
+                            picking = true
+                        } label: {
+                            Label("Start Playlist", systemImage: "list.bullet")
+                        }
                     }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Import Files…", systemImage: "square.and.arrow.down") { importing = true }
                         Button("Import Folder…", systemImage: "folder") { importingFolder = true }
